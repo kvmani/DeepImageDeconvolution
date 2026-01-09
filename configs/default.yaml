@@ -1,0 +1,55 @@
+# Default configuration for synthetic data generation.
+data:
+  input_dir: data/raw
+  output_dir: data/synthetic
+  num_samples: 1000
+  allow_same: false
+  preprocess:
+    auto_crop_to_min: true
+    crop:
+      enabled: false
+      size: [480, 640]
+      mode: center
+    denoise:
+      enabled: false
+      sigma: 0.8
+    mask:
+      enabled: true
+      detect_existing: true
+      outside_zero_fraction: 0.98
+      zero_tolerance: 0.0005
+    normalize:
+      enabled: true
+      method: min_max
+      smart: true
+      histogram_bins: 4096
+      percentile: [1.0, 99.0]
+    augment:
+      apply_to: B
+      flip_horizontal: true
+      flip_vertical: true
+      rotate90: true
+  mix:
+    pipeline: normalize_then_mix
+    normalize_after_mix: false
+    normalize_method: max
+    normalize_smart: true
+    weight:
+      min: 0.1
+      max: 0.9
+    blur:
+      enabled: false
+      sigma: 1.0
+    noise:
+      enabled: false
+      std: 0.01
+  output:
+    format: png
+
+debug:
+  enabled: false
+  seed: 42
+  visualize: false
+  max_visualizations: 10
+  sample_limit: 25
+  sum_tolerance: 0.005

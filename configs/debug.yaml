@@ -1,0 +1,55 @@
+# Debug configuration for synthetic data generation.
+data:
+  input_dir: data/code_development_data
+  output_dir: data/synthetic/debug_run
+  num_samples: 6
+  allow_same: true
+  preprocess:
+    auto_crop_to_min: true
+    crop:
+      enabled: false
+      size: [480, 640]
+      mode: center
+    denoise:
+      enabled: false
+      sigma: 0.8
+    mask:
+      enabled: true
+      detect_existing: true
+      outside_zero_fraction: 0.98
+      zero_tolerance: 0.0005
+    normalize:
+      enabled: true
+      method: min_max
+      smart: true
+      histogram_bins: 1024
+      percentile: [1.0, 99.0]
+    augment:
+      apply_to: B
+      flip_horizontal: true
+      flip_vertical: true
+      rotate90: true
+  mix:
+    pipeline: normalize_then_mix
+    normalize_after_mix: false
+    normalize_method: max
+    normalize_smart: true
+    weight:
+      min: 0.2
+      max: 0.8
+    blur:
+      enabled: false
+      sigma: 1.0
+    noise:
+      enabled: false
+      std: 0.02
+  output:
+    format: png
+
+debug:
+  enabled: true
+  seed: 7
+  visualize: true
+  max_visualizations: 6
+  sample_limit: 6
+  sum_tolerance: 0.01

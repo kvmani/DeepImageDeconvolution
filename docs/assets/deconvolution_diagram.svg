@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="260" viewBox="0 0 900 260">
+  <defs>
+    <style>
+      .box { fill: #f5f5f5; stroke: #333333; stroke-width: 2; }
+      .label { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #111111; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 18px; font-weight: bold; fill: #111111; }
+      .arrow { stroke: #333333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .subtle { font-family: Arial, Helvetica, sans-serif; font-size: 12px; fill: #444444; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333333" />
+    </marker>
+  </defs>
+
+  <rect x="30" y="70" width="180" height="120" rx="12" class="box" />
+  <text x="120" y="115" text-anchor="middle" class="title">C (mixed)</text>
+  <text x="120" y="140" text-anchor="middle" class="label">Kikuchi pattern</text>
+  <text x="120" y="160" text-anchor="middle" class="subtle">16-bit input</text>
+
+  <rect x="270" y="60" width="220" height="140" rx="12" class="box" />
+  <text x="380" y="110" text-anchor="middle" class="title">Deconvolution</text>
+  <text x="380" y="135" text-anchor="middle" class="label">Model</text>
+  <text x="380" y="155" text-anchor="middle" class="subtle">learned inverse</text>
+
+  <rect x="580" y="40" width="140" height="80" rx="12" class="box" />
+  <text x="650" y="80" text-anchor="middle" class="title">A</text>
+  <text x="650" y="100" text-anchor="middle" class="label">pure</text>
+
+  <rect x="580" y="140" width="140" height="80" rx="12" class="box" />
+  <text x="650" y="180" text-anchor="middle" class="title">B</text>
+  <text x="650" y="200" text-anchor="middle" class="label">pure</text>
+
+  <path d="M 210 130 L 270 130" class="arrow" />
+  <path d="M 490 130 L 560 80" class="arrow" />
+  <path d="M 490 130 L 560 180" class="arrow" />
+
+  <text x="650" y="225" text-anchor="middle" class="subtle">Recovered patterns</text>
+</svg>

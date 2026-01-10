@@ -51,6 +51,8 @@ Key options:
    - Normalize the mixture globally.
    - `data.mix.normalize_smart` controls whether mask-aware stats are used.
 
+For experimentation with alternative mixing heuristics (blur, noise, gamma, exposure), use the notebook in `notebooks/mixing_experiments.ipynb`.
+
 ## Circular masking and smart normalization
 
 Most Kikuchi analysis uses only the central circular region of the detector. The generator therefore applies a **maximum inscribed circular mask** centered in the image by default. If the input appears already masked (outside pixels are near zero), this is detected and recorded in `metadata.csv`.

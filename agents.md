@@ -58,7 +58,7 @@ kikuchi_deconvolution/
 
 ## 3. Coding Conventions
 
-* **Language and Libraries**: Use Python 3.10+ and PyTorch (tested on CPU and CUDA).  Avoid experimental libraries unless justified and stable.
+* **Language and Libraries**: Use Python 3.10+ and PyTorch (tested on CPU and CUDA). Ensure that code does work with python 3.11, and 3.12 seamlessly. Avoid experimental libraries unless justified and stable.
 * **Type Hints**: All public functions and class methods must include type annotations.  Use `typing.Tuple`, `typing.List`, etc., for clarity.
 * **Docstrings**: Follow the [NumPy docstring standard](https://numpydoc.readthedocs.io/en/latest/format.html) for functions, classes, and methods.  Describe the purpose, parameters, returns, raises, and examples if helpful.
 * **PEP 8 Compliance**: Adhere to PEP 8 coding style.  Use `ruff` or `flake8` in CI to enforce formatting.  Long lines should be wrapped for readability.

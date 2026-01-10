@@ -1,0 +1,49 @@
+# Debug inference configuration for quick checks.
+data:
+  mixed_dir: data/synthetic/debug_run/C
+  extensions: [".png", ".tif", ".tiff"]
+  num_workers: 0
+  preprocess:
+    mask:
+      enabled: true
+      detect_existing: true
+      outside_zero_fraction: 0.98
+      zero_tolerance: 0.0005
+    normalize:
+      enabled: false
+      method: min_max
+      smart: true
+      histogram_bins: 1024
+      percentile: [1.0, 99.0]
+
+model:
+  name: unet_dual
+  in_channels: 1
+  out_channels: 1
+  base_channels: 16
+  depth: 3
+  up_mode: transpose
+  use_batchnorm: false
+  dropout: 0.0
+  init: kaiming
+
+inference:
+  batch_size: 1
+  clamp_outputs: true
+
+postprocess:
+  apply_mask: true
+
+output:
+  out_dir: outputs/infer_debug
+  format: png
+  save_sum: true
+
+logging:
+  log_to_file: true
+  log_level: DEBUG
+
+debug:
+  enabled: true
+  seed: 42
+  sample_limit: 8

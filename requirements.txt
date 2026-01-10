@@ -4,3 +4,4 @@ PyYAML>=6.0
 matplotlib>=3.7
 scipy>=1.10
 pytest>=7.4
+torch>=2.0

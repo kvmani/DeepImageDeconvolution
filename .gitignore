@@ -10,6 +10,7 @@ venv/
 data/synthetic/
 models/
 logs/
+outputs/
 
 # Notebooks
 .ipynb_checkpoints/

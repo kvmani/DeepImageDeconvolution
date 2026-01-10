@@ -79,6 +79,28 @@ CLI overrides include `--no-mask` and `--no-smart-normalize` if you need standar
 
 See `docs/data_generation.md` for detailed configuration options and workflow guidance.
 
+## Mixing experiments notebook
+
+Use the notebook in `notebooks/mixing_experiments.ipynb` to explore different mixing algorithms and parameter settings with real Kikuchi samples. It supports optional interactive sliders, blur/noise/gamma controls, and scoring against a target C.
+
+See `docs/mixing_experiments.md` for usage notes.
+
+## Training and inference
+
+Train the dual-output U-Net with:
+
+```bash
+python3 scripts/run_train.py --config configs/train_default.yaml --out_dir outputs/train_run
+```
+
+Run inference with a checkpoint:
+
+```bash
+python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint outputs/train_run/best.pt
+```
+
+See `docs/training_inference.md` for configuration details and expected tensor shapes.
+
 ## Documentation
 
 See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phased deliverables.

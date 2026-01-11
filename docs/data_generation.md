@@ -6,6 +6,7 @@ This guide documents the synthetic data generation workflow for mixed Kikuchi pa
 
 - Place 16-bit PNG/TIF pure patterns under `data/raw/`.
 - For local testing, sample files exist in `data/code_development_data/`.
+- For real experimental examples (BCC/FCC), see `data/raw/Double Pattern Data/` and the pure references under `Good Pattern/`. Mixed patterns in that folder are useful for qualitative evaluation or benchmarking.
 
 The pipeline will fail if input images are not 16-bit (uint16).
 

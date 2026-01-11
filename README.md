@@ -16,21 +16,23 @@ C = normalize(wA * A + wB * B),  where wA + wB = 1
 
 Given **C**, predict the corresponding **A** and **B**.
 
+Example experimental patterns from the dual-phase steel dataset in `data/raw/Double Pattern Data/` are shown below.
+
 <table>
   <tr>
     <td align="center">
-      <img src="data/code_development_data/image_C.png" width="220" alt="Mixed pattern C">
+      <img src="data/raw/Double%20Pattern%20Data/50-50%20Double%20Pattern/50-50_0.bmp" width="220" alt="Mixed pattern C (50% BCC, 50% FCC)">
       <br>
       C (mixed)
     </td>
     <td align="center" width="40">&rarr;</td>
     <td align="center">
-      <img src="data/code_development_data/image_A.png" width="220" alt="Pure pattern A">
+      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_BCC-1.bmp" width="220" alt="Pure pattern A (BCC)">
       <br>
       A (pure)
     </td>
     <td align="center">
-      <img src="data/code_development_data/image_B.png" width="220" alt="Pure pattern B">
+      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_FCC-1.bmp" width="220" alt="Pure pattern B (FCC)">
       <br>
       B (pure)
     </td>
@@ -79,9 +81,11 @@ CLI overrides include `--no-mask` and `--no-smart-normalize` if you need standar
 
 See `docs/data_generation.md` for detailed configuration options and workflow guidance.
 
+Raw experimental dual-phase patterns are documented in [`data/raw/Double Pattern Data/README.md`](data/raw/Double%20Pattern%20Data/README.md).
+
 ## Mixing experiments notebook
 
-Use the notebook in `notebooks/mixing_experiments.ipynb` to explore different mixing algorithms and parameter settings with real Kikuchi samples. It supports optional interactive sliders, blur/noise/gamma controls, and scoring against a target C.
+Interactive sandbox for mixing A/B into C with x/y weights, pipeline selection, and optional widgets. It defaults to experimental BCC/FCC reference patterns from `data/raw/Double Pattern Data/Good Pattern/` and does not require a target C. Open [`notebooks/mixing_experiments.ipynb`](notebooks/mixing_experiments.ipynb) via `jupyter notebook notebooks/mixing_experiments.ipynb` and tweak the sliders or manual parameter cells.
 
 See `docs/mixing_experiments.md` for usage notes.
 

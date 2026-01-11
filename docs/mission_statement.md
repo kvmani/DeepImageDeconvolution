@@ -12,6 +12,8 @@ Given two 16‑bit grayscale Kikuchi patterns **A** and **B**, we form a mixed p
 
 \[C = \mathrm{normalize}(w_A \cdot A + w_B \cdot B),\quad w_A + w_B = 1.\]
 
+Example experimental patterns in this repository live under `data/raw/Double Pattern Data/` (dual-phase steel: BCC + FCC). For instance, `data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp` (A) and `data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp` (B) are pure references, while `data/raw/Double Pattern Data/50-50 Double Pattern/50-50_0.bmp` is a mixed pattern.
+
 The task is twofold:
 
 1. **Data generation** – starting from a small set of high quality pure patterns, generate realistic mixed patterns \(C\) and paired ground truth \(A,B\) images at scale.  The generation procedure must preserve the dynamic range of the input (16‑bit) and simulate real mixing physics (e.g., detector point spread, intensity normalisation, noise).

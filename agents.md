@@ -72,6 +72,7 @@ kikuchi_deconvolution/
 3. **Normalisation**: Convert pixel intensities to `float32` in the range \([0,1]\) using `astype(np.float32) / 65535.0`.  For masked images, compute normalization statistics **inside the circular mask** (smart normalization) so outside zeros do not skew the scale.  This smart normalization is project-specific and should remain configurable (default on).  Save any rescaling parameters for inverse transforms if necessary.
 4. **Augmentations**: Provide augmentation utilities (flip, rotate, random crop) that preserve bit‑depth.  Augmentations should be parameterised and configurable in YAML.
 5. **Synthetic Mixing**: Functions in `src/generation/` must implement the pipelines described in the mission statement (normalise‑then‑mix and mix‑then‑normalise).  They should accept two `numpy.ndarray` inputs, weights, and return a tuple `(C, (A, B))`.  Reapply the circular mask after any blur/noise so outside pixels remain zero.  For debug, allow deterministic weights and small images.
+6. **Real Experimental Data**: When example, validation, or benchmark data is needed, use the dataset in `data/raw/Double Pattern Data/` and reference its README. Scripts, notebooks, and tests should use this data where appropriate, without modifying the raw files.
 
 ## 5. Model Development Guidelines
 
@@ -100,7 +101,13 @@ kikuchi_deconvolution/
 4. **Documentation**: Update docstrings and, where appropriate, extend `docs/` or `README.md`.  If the change affects the mission or roadmap, coordinate with the doc owners.
 5. **Pull Request**: Use conventional commit messages (`feat:`, `fix:`, `docs:`).  Include a description of the change, test results, and any relevant screenshots or sample outputs.  Tag reviewers knowledgeable about data handling or model architecture.
 
-## 9. Acceptance Checklist (Self‑Verify)
+## 9. Notebook Standards
+
+* **Interactive Exploration**: All new or updated `.ipynb` files must be properly interactive and facilitate exploration in the best possible way (use `ipywidgets` where available, and include a clear manual-parameter fallback).
+* **Pipeline Choice**: Notebooks that compare algorithms or mixing strategies must expose pipeline selection and key parameters in cells or widgets (no hard-coded-only paths).
+* **Documentation**: Every notebook must have exhaustive companion documentation under `docs/` covering purpose, inputs/outputs, dependencies, and usage steps. The top-level `README.md` must link to both the notebook and its documentation.
+
+## 10. Acceptance Checklist (Self‑Verify)
 
 Before marking a task complete or opening a pull request, verify:
 

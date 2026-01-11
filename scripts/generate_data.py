@@ -2,15 +2,19 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Dict
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from src.generation.dataset import generate_synthetic_dataset
 from src.utils.config import deep_update, load_config
 from src.utils.logging import get_logger
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "configs/default.yaml"
 DEBUG_CONFIG = REPO_ROOT / "configs/debug.yaml"
 

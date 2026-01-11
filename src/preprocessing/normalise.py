@@ -1,7 +1,7 @@
 """Normalization utilities for 16-bit images."""
 from __future__ import annotations
 
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -147,3 +147,29 @@ def histogram_equalization(
     output = np.zeros_like(image, dtype=np.float32)
     output[mask] = mapped.astype(np.float32)
     return output
+
+
+def normalize_with_metadata(
+    image: np.ndarray,
+    method: NormalizeMethod = "min_max",
+    eps: float = 1e-6,
+    percentile: Tuple[float, float] = (1.0, 99.0),
+    histogram_bins: int = 4096,
+    mask: Optional[np.ndarray] = None,
+    smart_minmax: bool = False,
+) -> Tuple[np.ndarray, Dict[str, object]]:
+    """Normalize an image and return metadata about the normalization."""
+    normalized = normalize_image(
+        image,
+        method=method,
+        eps=eps,
+        percentile=percentile,
+        histogram_bins=histogram_bins,
+        mask=mask,
+        smart_minmax=smart_minmax,
+    )
+    meta: Dict[str, object] = {
+        "normalize_method": method,
+        "normalize_smart": smart_minmax,
+    }
+    return normalized, meta

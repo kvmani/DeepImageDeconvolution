@@ -1,14 +1,14 @@
 # Mixing Experiments Notebook
 
-The notebook `notebooks/mixing_experiments.ipynb` is a sandbox for exploring different ways to mix pure Kikuchi patterns A and B into a realistic mixed pattern C, including x/y weight sweeps and pipeline selection. It does not require a target C.
+The notebook `notebooks/mixing_experiments.ipynb` is a compact, interactive sandbox for exploring synthetic mixing strategies (A/B → C) that map directly to the dataset generator (`scripts/generate_data.py`). It does not require a target C.
 
 ## What it covers
 
-- Normalize-then-mix vs mix-then-normalize pipelines
-- x/y weight combinations (with optional weight normalization)
+- `normalize_then_mix` vs `mix_then_normalize` pipelines
+- Weight sweep via `wA` (with `wB = 1 - wA`)
 - Circular masking and smart normalization inside the mask
-- Blur, noise, gamma, and exposure adjustments
-- Optional interactive controls (ipywidgets)
+- Gaussian blur/noise knobs used by synthetic generation
+- Sum-rule diff preview: `C - (wA*A + wB*B)`
 
 ## Usage
 
@@ -18,13 +18,9 @@ From the repo root:
 jupyter notebook notebooks/mixing_experiments.ipynb
 ```
 
-The notebook defaults to `data/raw/Double Pattern Data/Good Pattern/` for A/B. Update the `*_PATH` variables in the notebook to point to your own data.
+The notebook defaults to `data/raw/Double Pattern Data/Good Pattern/` for A/B. Update `A_PATH` and `B_PATH` in the notebook to point to your own data.
+The A/B dropdown choices are populated from `A_PATH.parent` in the notebook.
 
-Set `ALLOW_NON_16BIT = False` if you want the notebook to reject non-16-bit inputs.
+## Dependencies
 
-## Optional dependencies
-
-- `ipywidgets` for interactive sliders
-- `scipy` for Gaussian blur
-
-If not installed, the notebook will fall back to manual parameter cells.
+The notebook expects `ipywidgets`, `scipy`, `Pillow`, and `matplotlib` to be installed.

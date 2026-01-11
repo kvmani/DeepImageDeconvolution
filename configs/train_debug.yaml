@@ -58,6 +58,17 @@ logging:
   log_to_file: true
   log_level: DEBUG
   log_interval: 1
+  image_log:
+    enabled: true
+    interval: 1
+    max_samples: 2
+    sample_strategy: first
+    sample_ids: []
+    split: val
+    output_dir: null
+    image_format: png
+    write_html: true
+    include_sum: true
 
 output:
   out_dir: outputs/train_debug

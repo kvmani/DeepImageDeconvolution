@@ -4,7 +4,7 @@ pytest.importorskip("torch")
 
 import torch
 
-from src.utils.metrics import psnr, ssim
+from src.utils.metrics import mse, psnr, ssim
 
 
 def test_psnr_higher_for_identical() -> None:
@@ -20,3 +20,9 @@ def test_ssim_range() -> None:
     y = x.clone()
     ssim_val = ssim(x, y).item()
     assert 0.9 <= ssim_val <= 1.0
+
+
+def test_mse_zero_for_identical() -> None:
+    x = torch.rand(1, 1, 8, 8)
+    y = x.clone()
+    assert mse(x, y).item() == pytest.approx(0.0, abs=1e-6)

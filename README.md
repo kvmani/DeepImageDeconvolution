@@ -85,7 +85,7 @@ Raw experimental dual-phase patterns are documented in [`data/raw/Double Pattern
 
 ## Mixing experiments notebook
 
-Interactive sandbox for mixing A/B into C with x/y weights, pipeline selection, and optional widgets. It defaults to experimental BCC/FCC reference patterns from `data/raw/Double Pattern Data/Good Pattern/` and does not require a target C. Open [`notebooks/mixing_experiments.ipynb`](notebooks/mixing_experiments.ipynb) via `jupyter notebook notebooks/mixing_experiments.ipynb` and tweak the sliders or manual parameter cells.
+Interactive sandbox for mixing A/B into C (pipeline + `wA` slider) that mirrors the knobs in `scripts/generate_data.py`. It defaults to experimental BCC/FCC reference patterns from `data/raw/Double Pattern Data/Good Pattern/` and does not require a target C. Open [`notebooks/mixing_experiments.ipynb`](notebooks/mixing_experiments.ipynb) via `jupyter notebook notebooks/mixing_experiments.ipynb` and use the UI to explore settings.
 
 See `docs/mixing_experiments.md` for usage notes.
 
@@ -103,7 +103,9 @@ Run inference with a checkpoint:
 python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint outputs/train_run/best.pt
 ```
 
-See `docs/training_inference.md` for configuration details and expected tensor shapes.
+See [`docs/training/README.md`](docs/training/README.md) for detailed training commands and recommended settings. See [`docs/training_inference.md`](docs/training_inference.md) for tensor shapes and inference notes.
+
+When enabled, training also writes an HTML image log under `<out_dir>/monitoring` for quick visual inspection.
 
 ## Documentation
 

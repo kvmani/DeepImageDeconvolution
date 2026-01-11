@@ -30,6 +30,11 @@ def psnr(pred: torch.Tensor, target: torch.Tensor, data_range: float = 1.0) -> t
     return psnr_val
 
 
+def mse(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Compute per-sample MSE for a batch of images."""
+    return F.mse_loss(pred, target, reduction="none").mean(dim=(1, 2, 3))
+
+
 def _gaussian_kernel(window_size: int, sigma: float, device: torch.device) -> torch.Tensor:
     coords = torch.arange(window_size, device=device) - window_size // 2
     g = torch.exp(-(coords**2) / (2 * sigma**2))

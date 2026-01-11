@@ -2,6 +2,8 @@
 
 This guide documents the U-Net baseline training and inference pipelines.
 
+For detailed training commands and config guidance, see [`docs/training/README.md`](training/README.md).
+
 ## Training
 
 Run training with a config file:
@@ -19,7 +21,7 @@ python3 scripts/run_train.py --config configs/train_debug.yaml --debug
 Outputs in `out_dir`:
 
 - `best.pt` and `last.pt` checkpoints
-- `history.json` with epoch metrics
+- `history.json` with epoch metrics (including PSNR/SSIM and L2/MSE)
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
 

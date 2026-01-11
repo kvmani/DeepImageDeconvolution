@@ -11,14 +11,15 @@ import json
 import numpy as np
 
 from src.generation.mix import MixPipeline, mix_normalize_then_mix, mix_then_normalize
-from src.preprocessing.mask import apply_circular_mask, build_circular_mask, detect_circular_mask
-from src.preprocessing.normalise import normalize_image
+from src.preprocessing.mask import apply_circular_mask, build_mask_with_metadata
+from src.preprocessing.normalise import normalize_with_metadata
 from src.preprocessing.transforms import (
     apply_crop,
     apply_flip,
     apply_gaussian_blur,
     apply_gaussian_noise,
     apply_rotation_90,
+    center_crop_to_min,
 )
 from src.utils.io import collect_image_paths, read_image_16bit, to_float01, write_image_16bit
 from src.utils.logging import get_logger
@@ -39,7 +40,6 @@ def _ensure_same_shape(
     image_a: np.ndarray,
     image_b: np.ndarray,
     auto_crop: bool,
-    rng: np.random.Generator,
 ) -> Tuple[np.ndarray, np.ndarray]:
     if image_a.shape == image_b.shape:
         return image_a, image_b
@@ -47,12 +47,7 @@ def _ensure_same_shape(
         raise ValueError(
             f"Image shapes do not match and auto-crop is disabled: {image_a.shape} vs {image_b.shape}."
         )
-    target_h = min(image_a.shape[0], image_b.shape[0])
-    target_w = min(image_a.shape[1], image_b.shape[1])
-    size = (target_h, target_w)
-    image_a = apply_crop(image_a, size=size, mode="center", rng=rng)
-    image_b = apply_crop(image_b, size=size, mode="center", rng=rng)
-    return image_a, image_b
+    return center_crop_to_min(image_a, image_b)
 
 
 def _apply_augmentations(
@@ -112,27 +107,17 @@ def _preprocess_image(
     mask_cfg = preprocess_cfg.get("mask", {})
     mask_enabled = bool(mask_cfg.get("enabled", True))
     if mask_enabled:
-        mask = build_circular_mask(image.shape)
         detect_existing = bool(mask_cfg.get("detect_existing", True))
         outside_zero_fraction = float(mask_cfg.get("outside_zero_fraction", 0.98))
         zero_tolerance = float(mask_cfg.get("zero_tolerance", 1e-6))
-        already_masked = None
-        measured_fraction = None
-        if detect_existing:
-            already_masked, measured_fraction = detect_circular_mask(
-                image,
-                mask,
-                zero_tolerance=zero_tolerance,
-                outside_zero_fraction=outside_zero_fraction,
-            )
+        mask, mask_meta = build_mask_with_metadata(
+            image,
+            detect_existing=detect_existing,
+            zero_tolerance=zero_tolerance,
+            outside_zero_fraction=outside_zero_fraction,
+        )
         image = apply_circular_mask(image, mask)
-        meta["mask"] = {
-            "enabled": True,
-            "already_masked": already_masked,
-            "outside_zero_fraction": measured_fraction,
-            "zero_tolerance": zero_tolerance,
-            "outside_zero_threshold": outside_zero_fraction,
-        }
+        meta["mask"] = mask_meta
     else:
         meta["mask"] = {"enabled": False}
 
@@ -142,7 +127,7 @@ def _preprocess_image(
         histogram_bins = int(normalize_cfg.get("histogram_bins", 4096))
         percentile = tuple(normalize_cfg.get("percentile", (1.0, 99.0)))
         smart = bool(normalize_cfg.get("smart", True))
-        image = normalize_image(
+        image, norm_meta = normalize_with_metadata(
             image,
             method=method,
             histogram_bins=histogram_bins,
@@ -150,8 +135,7 @@ def _preprocess_image(
             mask=mask,
             smart_minmax=smart,
         )
-        meta["normalize_method"] = method
-        meta["normalize_smart"] = smart
+        meta.update(norm_meta)
 
     return image.astype(np.float32), meta, mask
 
@@ -330,7 +314,7 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
             image_a = to_float01(read_image_16bit(path_a))
             image_b = to_float01(read_image_16bit(path_b))
 
-            image_a, image_b = _ensure_same_shape(image_a, image_b, auto_crop, rng)
+            image_a, image_b = _ensure_same_shape(image_a, image_b, auto_crop)
 
             augment_a = augment_apply_to.lower() in ("a", "both")
             augment_b = augment_apply_to.lower() in ("b", "both")

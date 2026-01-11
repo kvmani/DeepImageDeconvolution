@@ -52,7 +52,7 @@ Key options:
    - Normalize the mixture globally.
    - `data.mix.normalize_smart` controls whether mask-aware stats are used.
 
-For experimentation with alternative mixing heuristics (blur, noise, gamma, exposure), use the notebook in `notebooks/mixing_experiments.ipynb`.
+For experimentation with mixing settings (pipeline choice, weights, masking/normalization, blur/noise), use the notebook in `notebooks/mixing_experiments.ipynb`.
 
 ## Circular masking and smart normalization
 

@@ -58,6 +58,17 @@ logging:
   log_to_file: true
   log_level: INFO
   log_interval: 25
+  image_log:
+    enabled: false
+    interval: 5
+    max_samples: 4
+    sample_strategy: fixed
+    sample_ids: []
+    split: val
+    output_dir: null
+    image_format: png
+    write_html: true
+    include_sum: true
 
 output:
   out_dir: outputs/train_run

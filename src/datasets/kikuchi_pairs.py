@@ -9,9 +9,14 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, random_split
 
-from src.preprocessing.mask import apply_circular_mask, build_circular_mask, detect_circular_mask
-from src.preprocessing.normalise import normalize_image
-from src.preprocessing.transforms import apply_flip, apply_rotation_90
+from src.preprocessing.mask import apply_circular_mask, build_mask_with_metadata
+from src.preprocessing.normalise import normalize_with_metadata
+from src.preprocessing.transforms import (
+    apply_crop_indices,
+    apply_flip,
+    apply_rotation_90,
+    compute_crop_indices,
+)
 from src.utils.io import read_image_16bit, to_float01
 from src.utils.logging import get_logger
 
@@ -90,47 +95,6 @@ def _apply_augmentations(
     return image
 
 
-def _compute_crop_indices(
-    shape: Tuple[int, int],
-    size: Tuple[int, int],
-    mode: str,
-    rng: np.random.Generator,
-) -> Tuple[int, int]:
-    height, width = shape
-    target_h, target_w = size
-    if target_h > height or target_w > width:
-        raise ValueError("Crop size must be <= image size.")
-    if mode == "center":
-        top = (height - target_h) // 2
-        left = (width - target_w) // 2
-        return top, left
-    if mode == "random":
-        top = int(rng.integers(0, height - target_h + 1))
-        left = int(rng.integers(0, width - target_w + 1))
-        return top, left
-    raise ValueError(f"Unknown crop mode: {mode}")
-
-
-def _apply_crop(image: np.ndarray, top: int, left: int, size: Tuple[int, int]) -> np.ndarray:
-    target_h, target_w = size
-    return image[top : top + target_h, left : left + target_w]
-
-
-def _build_mask(image: np.ndarray, cfg: PreprocessConfig) -> Tuple[np.ndarray, Dict[str, float]]:
-    mask = build_circular_mask(image.shape)
-    meta: Dict[str, float] = {}
-    if cfg.detect_existing:
-        detected, outside_fraction = detect_circular_mask(
-            image,
-            mask,
-            zero_tolerance=cfg.zero_tolerance,
-            outside_zero_fraction=cfg.outside_zero_fraction,
-        )
-        meta["mask_detected"] = float(detected)
-        meta["outside_zero_fraction"] = outside_fraction
-    return mask, meta
-
-
 def _apply_preprocess(
     image: np.ndarray,
     cfg: PreprocessConfig,
@@ -140,7 +104,7 @@ def _apply_preprocess(
         image = apply_circular_mask(image, mask)
 
     if cfg.normalize_enabled:
-        image = normalize_image(
+        image, _ = normalize_with_metadata(
             image,
             method=cfg.normalize_method,
             histogram_bins=cfg.histogram_bins,
@@ -240,12 +204,12 @@ class KikuchiPairDataset(Dataset):
         if self.preprocess.crop_enabled:
             if self.preprocess.crop_size is None or len(self.preprocess.crop_size) != 2:
                 raise ValueError("crop.size must be a 2-element list when cropping is enabled.")
-            top, left = _compute_crop_indices(
+            top, left = compute_crop_indices(
                 image_c.shape, self.preprocess.crop_size, self.preprocess.crop_mode, rng
             )
-            image_a = _apply_crop(image_a, top, left, self.preprocess.crop_size)
-            image_b = _apply_crop(image_b, top, left, self.preprocess.crop_size)
-            image_c = _apply_crop(image_c, top, left, self.preprocess.crop_size)
+            image_a = apply_crop_indices(image_a, top, left, self.preprocess.crop_size)
+            image_b = apply_crop_indices(image_b, top, left, self.preprocess.crop_size)
+            image_c = apply_crop_indices(image_c, top, left, self.preprocess.crop_size)
         if self.preprocess.augment_enabled:
             flip_h = self.preprocess.flip_horizontal and bool(rng.random() < 0.5)
             flip_v = self.preprocess.flip_vertical and bool(rng.random() < 0.5)
@@ -256,7 +220,12 @@ class KikuchiPairDataset(Dataset):
 
         mask = None
         if self.preprocess.mask_enabled:
-            mask, _ = _build_mask(image_c, self.preprocess)
+            mask, _ = build_mask_with_metadata(
+                image_c,
+                detect_existing=self.preprocess.detect_existing,
+                zero_tolerance=self.preprocess.zero_tolerance,
+                outside_zero_fraction=self.preprocess.outside_zero_fraction,
+            )
 
         image_a = _apply_preprocess(image_a, self.preprocess, mask)
         image_b = _apply_preprocess(image_b, self.preprocess, mask)
@@ -314,12 +283,17 @@ class KikuchiMixedDataset(Dataset):
         if self.preprocess.crop_enabled:
             if self.preprocess.crop_size is None or len(self.preprocess.crop_size) != 2:
                 raise ValueError("crop.size must be a 2-element list when cropping is enabled.")
-            top, left = _compute_crop_indices(
+            top, left = compute_crop_indices(
                 image_c.shape, self.preprocess.crop_size, self.preprocess.crop_mode, rng
             )
-            image_c = _apply_crop(image_c, top, left, self.preprocess.crop_size)
+            image_c = apply_crop_indices(image_c, top, left, self.preprocess.crop_size)
         if self.preprocess.mask_enabled:
-            mask, _ = _build_mask(image_c, self.preprocess)
+            mask, _ = build_mask_with_metadata(
+                image_c,
+                detect_existing=self.preprocess.detect_existing,
+                zero_tolerance=self.preprocess.zero_tolerance,
+                outside_zero_fraction=self.preprocess.outside_zero_fraction,
+            )
 
         image_c = _apply_preprocess(image_c, self.preprocess, mask)
 

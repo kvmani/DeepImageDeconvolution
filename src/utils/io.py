@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 from PIL import Image
@@ -120,3 +120,64 @@ def to_float01(image: np.ndarray) -> np.ndarray:
     if image.dtype != np.uint16:
         raise ValueError(f"Expected uint16 image, got dtype={image.dtype}.")
     return image.astype(np.float32) / 65535.0
+
+
+def _ensure_grayscale(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return image
+    if image.ndim == 3:
+        return image[..., 0]
+    raise ValueError(f"Expected 2D/3D image array, got shape={image.shape}.")
+
+
+def _to_float01_non16(image: np.ndarray) -> np.ndarray:
+    if image.dtype == np.uint8:
+        return image.astype(np.float32) / 255.0
+    if np.issubdtype(image.dtype, np.integer):
+        max_val = np.iinfo(image.dtype).max
+        return image.astype(np.float32) / float(max_val)
+    if np.issubdtype(image.dtype, np.floating):
+        max_val = float(image.max())
+        if max_val > 1.0:
+            return (image / max_val).astype(np.float32)
+        return image.astype(np.float32)
+    raise ValueError(f"Unsupported image dtype: {image.dtype}.")
+
+
+def to_float01_any(image: np.ndarray, allow_non_16bit: bool = False) -> np.ndarray:
+    """Convert an image to float32 in [0, 1].
+
+    Parameters
+    ----------
+    image:
+        Input image array.
+    allow_non_16bit:
+        When False, only uint16 inputs are accepted.
+    """
+    image = _ensure_grayscale(image)
+    if image.dtype == np.uint16:
+        return to_float01(image)
+    if not allow_non_16bit:
+        raise ValueError(
+            f"Expected uint16 image, got dtype={image.dtype}. "
+            "Set allow_non_16bit=True for exploratory use."
+        )
+    return _to_float01_non16(image)
+
+
+def read_image_float01(path: Path, allow_non_16bit: bool = False) -> np.ndarray:
+    """Read a grayscale image and return float32 in [0, 1]."""
+    with Image.open(path) as img:
+        image = np.array(img)
+    return to_float01_any(image, allow_non_16bit=allow_non_16bit)
+
+
+def read_image_float01_with_meta(
+    path: Path, allow_non_16bit: bool = False
+) -> tuple[np.ndarray, Dict[str, object]]:
+    """Read a grayscale image and return float32 in [0, 1] with metadata."""
+    with Image.open(path) as img:
+        image = np.array(img)
+    meta: Dict[str, object] = {"path": str(path), "dtype": str(image.dtype)}
+    meta["is_16bit"] = bool(image.dtype == np.uint16)
+    return to_float01_any(image, allow_non_16bit=allow_non_16bit), meta

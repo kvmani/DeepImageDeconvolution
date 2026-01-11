@@ -42,11 +42,53 @@ def apply_crop(
     """Apply optional cropping."""
     if size is None:
         return image
+    top, left = compute_crop_indices(image.shape, size, mode, rng)
+    return apply_crop_indices(image, top, left, size)
+
+
+def compute_crop_indices(
+    shape: Tuple[int, int],
+    size: Tuple[int, int],
+    mode: CropMode,
+    rng: np.random.Generator,
+) -> Tuple[int, int]:
+    """Compute crop indices for a given shape and size."""
+    height, width = shape
+    target_h, target_w = size
+    if target_h > height or target_w > width:
+        raise ValueError("Crop size must be <= image size.")
     if mode == "center":
-        return center_crop(image, size)
+        top = (height - target_h) // 2
+        left = (width - target_w) // 2
+        return top, left
     if mode == "random":
-        return random_crop(image, size, rng)
+        top = int(rng.integers(0, height - target_h + 1))
+        left = int(rng.integers(0, width - target_w + 1))
+        return top, left
     raise ValueError(f"Unknown crop mode: {mode}")
+
+
+def apply_crop_indices(
+    image: np.ndarray,
+    top: int,
+    left: int,
+    size: Tuple[int, int],
+) -> np.ndarray:
+    """Crop an image using precomputed indices."""
+    target_h, target_w = size
+    return image[top : top + target_h, left : left + target_w]
+
+
+def center_crop_to_min(
+    image_a: np.ndarray, image_b: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Center-crop two images to the minimum shared size."""
+    if image_a.shape == image_b.shape:
+        return image_a, image_b
+    target_h = min(image_a.shape[0], image_b.shape[0])
+    target_w = min(image_a.shape[1], image_b.shape[1])
+    size = (target_h, target_w)
+    return center_crop(image_a, size), center_crop(image_b, size)
 
 
 def apply_flip(image: np.ndarray, flip_horizontal: bool, flip_vertical: bool) -> np.ndarray:

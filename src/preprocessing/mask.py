@@ -1,7 +1,7 @@
 """Circular mask utilities for Kikuchi patterns."""
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -91,3 +91,34 @@ def apply_circular_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
     masked = image.copy()
     masked[~mask] = 0.0
     return masked
+
+
+def build_mask_with_metadata(
+    image: np.ndarray,
+    mask: Optional[np.ndarray] = None,
+    detect_existing: bool = True,
+    zero_tolerance: float = 1e-6,
+    outside_zero_fraction: float = 0.98,
+) -> Tuple[np.ndarray, Dict[str, object]]:
+    """Build a circular mask and return metadata about masking."""
+    if mask is None:
+        mask = build_circular_mask(image.shape)
+    elif mask.shape != image.shape:
+        raise ValueError("Mask shape must match image shape.")
+    meta: Dict[str, object] = {
+        "enabled": True,
+        "already_masked": None,
+        "outside_zero_fraction": None,
+        "zero_tolerance": zero_tolerance,
+        "outside_zero_threshold": outside_zero_fraction,
+    }
+    if detect_existing:
+        detected, fraction = detect_circular_mask(
+            image,
+            mask,
+            zero_tolerance=zero_tolerance,
+            outside_zero_fraction=outside_zero_fraction,
+        )
+        meta["already_masked"] = detected
+        meta["outside_zero_fraction"] = fraction
+    return mask, meta

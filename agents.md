@@ -19,6 +19,7 @@ If an indivudual folder has another agents.md use that for fine tuning the expec
 * **Cross‑Platform Support**: The code must run on Windows and Linux with CPU or GPU.  Use `os.path` for paths, avoid shell‑specific constructs, and rely on PyTorch device abstractions.  Do not hard‑code absolute directories; use configuration files and environment variables instead.
 * **No Hidden Hard‑Coding**: All hyperparameters, file paths, and model sizes must be configurable via YAML or command‑line flags.  Single letters or magic numbers in code should either be removed or explained clearly.
 * **Logging and Error Handling**: Use a central logging module (`src/utils/logging.py`) to obtain loggers.  Log at appropriate levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`) and include context (e.g., file names, shapes, bit‑depths).  Catch exceptions gracefully and present actionable messages.
+* **Documentation Sync (Critical)**: Any change to code/scripts/configs that affects behavior, outputs, CLI flags, file formats, or assumptions **must** be reflected in documentation in the same change. Documentation must cover (1) usage/how-to-run, (2) algorithmic details, and (3) scientific assumptions/rationale in appropriate `.md` files. Create dedicated docs where helpful (e.g., under `docs/` or next to scripts) and ensure the top-level `README.md` links to them for discoverability.
 
 ## 2. Repository Structure (Authoritative)
 
@@ -98,7 +99,7 @@ kikuchi_deconvolution/
 1. **Planning**: Before writing code, define the scope of the activity.  Identify corner cases (e.g., missing values, mismatched image shapes, invalid bit‑depths) and outline the algorithm in comments or a design doc.
 2. **Implementation**: Follow the guidelines above.  Use config files instead of hard‑coding.  Write clear, well‑commented code.  If you need to make assumptions, document them and expose them as parameters.
 3. **Testing**: Run unit tests (`pytest`) and script tests (`run_train.py --debug`).  Ensure cross‑platform compatibility by avoiding OS‑specific features.
-4. **Documentation**: Update docstrings and, where appropriate, extend `docs/` or `README.md`.  If the change affects the mission or roadmap, coordinate with the doc owners.
+4. **Documentation (Mandatory)**: Keep documentation fully synced with current behavior. Update docstrings and the relevant `.md` files (usage, algorithm, scientific context). Add new documentation files when needed and link them from the top-level `README.md`. If the change affects the mission or roadmap, coordinate with the doc owners.
 5. **Pull Request**: Use conventional commit messages (`feat:`, `fix:`, `docs:`).  Include a description of the change, test results, and any relevant screenshots or sample outputs.  Tag reviewers knowledgeable about data handling or model architecture.
 
 ## 9. Notebook Standards
@@ -116,6 +117,6 @@ Before marking a task complete or opening a pull request, verify:
 - [ ] No absolute paths or secret values appear in the code.  All parameters are configurable.
 - [ ] `pytest` passes on Windows and Linux (where possible).  If GPU‑specific code is added, provide a CPU fallback.
 - [ ] Logging statements provide sufficient context and do not leak sensitive data.
-- [ ] Documentation (mission statement, roadmap, README) is updated if interfaces or concepts changed.
+- [ ] Documentation is fully synced with behavior changes (usage, algorithmic details, scientific assumptions) and is linked appropriately from `README.md`.
 
 By following this AGENTS.md, we ensure that the project remains maintainable, reproducible and aligned with its scientific objectives.

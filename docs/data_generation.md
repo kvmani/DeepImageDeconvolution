@@ -4,11 +4,22 @@ This guide documents the synthetic data generation workflow for mixed Kikuchi pa
 
 ## Inputs
 
-- Place 16-bit PNG/TIF pure patterns under `data/raw/`.
+- Place 16-bit PNG/TIF/BMP pure patterns under `data/raw/`.
 - For local testing, sample files exist in `data/code_development_data/`.
 - For real experimental examples (BCC/FCC), see `data/raw/Double Pattern Data/` and the pure references under `Good Pattern/`. Mixed patterns in that folder are useful for qualitative evaluation or benchmarking.
 
-The pipeline will fail if input images are not 16-bit (uint16).
+Inputs may be 8-bit or 32-bit container formats in some cases. For reproducible training, prepare a canonical 16-bit grayscale copy under `data/processed/` with:
+
+```bash
+python3 scripts/prepare_experimental_data.py \
+  --input-dir "data/raw/Double Pattern Data" \
+  --output-dir "data/processed/Double Pattern Data" \
+  --output-format png \
+  --output-bit-depth 16
+```
+
+The generator expects 16-bit inputs and will raise if non-16-bit data are provided.
+The preparation script writes a JSON manifest with checksums and conversion parameters to `<output-dir>/manifest.json`.
 
 ## Outputs
 
@@ -91,4 +102,10 @@ To disable masking or smart normalization on the CLI:
 ```bash
 python3 scripts/generate_data.py --config configs/debug.yaml --no-mask
 python3 scripts/generate_data.py --config configs/debug.yaml --no-smart-normalize
+```
+
+To append a timestamped run directory:
+
+```bash
+python3 scripts/generate_data.py --config configs/debug.yaml --debug --run-tag debug_mix
 ```

@@ -2,7 +2,7 @@
 
 This folder contains real experimental Kikuchi patterns acquired from a dual-phase steel (BCC + FCC). These images are used to build and validate this project, generate test data, and benchmark mixing/deconvolution algorithms.
 
-> **Data policy:** The original 16-bit BMP files are stored in this folder. Keep them unchanged so experiments and benchmarks remain reproducible.
+> **Data policy:** The original BMP files are stored in this folder. Bit depth may be 8/16-bit or 32-bit container formats. Keep them unchanged so experiments and benchmarks remain reproducible.
 
 ## Dataset structure
 

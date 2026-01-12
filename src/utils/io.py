@@ -7,7 +7,7 @@ from typing import Dict, List
 import numpy as np
 from PIL import Image
 
-IMAGE_EXTENSIONS = (".png", ".tif", ".tiff")
+IMAGE_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp")
 
 
 def collect_image_paths(directory: Path) -> List[Path]:

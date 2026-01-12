@@ -12,7 +12,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - Paired dataset loaders for triplets (C, A, B, x) with debug sampling controls.
 - Baseline dual-output U-Net model with physics-aware reconstruction and weight supervision.
 - Training and inference CLI wrappers driven by YAML configs and debug modes.
-- Metrics in training (L1, L2, PSNR, SSIM) and periodic HTML monitoring with per-epoch summaries and plots.
+- Metrics in training (L1, L2, PSNR, SSIM) plus mask-aware variants, with periodic HTML monitoring and per-epoch summaries/plots.
 - Interactive mixing experiments notebook for exploring mixing strategies and parameters.
 - Unit and smoke tests covering preprocessing, mixing, data generation, training, and inference.
 
@@ -22,6 +22,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - Monitoring artifacts are written under `<out_dir>/monitoring` during training.
 - Real experimental patterns are included for reference in `data/raw/Double Pattern Data/`.
 - Advanced architectures (GANs/attention), orientation-based metrics, and production packaging are not implemented yet.
+- A preparation script can create canonical 16-bit copies of experimental BMPs under `data/processed/`.
 
 ## Codebase Map (Where to Look)
 

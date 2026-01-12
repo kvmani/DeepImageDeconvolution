@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.generation.dataset import generate_synthetic_dataset
 from src.utils.config import deep_update, load_config
 from src.utils.logging import get_logger
+from src.utils.run import resolve_run_dir
 
 
 DEFAULT_CONFIG = REPO_ROOT / "configs/default.yaml"
@@ -30,6 +31,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pipeline", type=str, default=None, help="Mixing pipeline name.")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed override.")
+    parser.add_argument(
+        "--run-tag",
+        type=str,
+        default=None,
+        help="Append a timestamped run tag to the output directory.",
+    )
     parser.add_argument(
         "--visualize",
         action="store_true",
@@ -104,6 +111,12 @@ def main() -> None:
     base_config = load_base_config(args)
     overrides = build_overrides(args)
     config = deep_update(base_config, overrides)
+    if args.run_tag:
+        output_dir = Path(config.get("data", {}).get("output_dir", "data/synthetic"))
+        config.setdefault("data", {})["output_dir"] = str(
+            resolve_run_dir(output_dir, args.run_tag)
+        )
+        config.setdefault("output", {})["run_tag"] = args.run_tag
 
     logger.info("Starting synthetic data generation")
     generate_synthetic_dataset(config)

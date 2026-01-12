@@ -5,7 +5,7 @@ import json
 import random
 import logging
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets import KikuchiPairDataset, split_dataset
 from src.models import build_model
+from src.preprocessing.mask import build_circular_mask
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.engine import evaluate, train_one_epoch
 from src.training.metrics import compute_reconstruction_metrics
@@ -45,6 +46,7 @@ class ImageLogConfig:
     image_format: str
     write_html: bool
     include_recon: bool
+    mask_metrics: bool
     seed: int
 
 
@@ -78,6 +80,7 @@ def _parse_image_log_config(logging_cfg: Dict[str, Any], out_dir: Path, seed: in
         image_format = "png"
     write_html = bool(cfg.get("write_html", True))
     include_recon = bool(cfg.get("include_recon", cfg.get("include_sum", True)))
+    mask_metrics = bool(cfg.get("mask_metrics", True))
     log_seed = int(cfg.get("seed", seed))
     return ImageLogConfig(
         enabled=enabled,
@@ -90,6 +93,7 @@ def _parse_image_log_config(logging_cfg: Dict[str, Any], out_dir: Path, seed: in
         image_format=image_format,
         write_html=write_html,
         include_recon=include_recon,
+        mask_metrics=mask_metrics,
         seed=log_seed,
     )
 
@@ -172,6 +176,11 @@ def _log_epoch_images(
             c = sample["C"].unsqueeze(0).to(device)
             a = sample["A"].unsqueeze(0).to(device)
             b = sample["B"].unsqueeze(0).to(device)
+            mask = None
+            if cfg.mask_metrics:
+                mask_np = build_circular_mask(c.shape[-2:])
+                mask = torch.from_numpy(mask_np.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+                mask = mask.to(device)
 
             pred_a, pred_b, x_hat = model(c)
             pred_a = torch.clamp(pred_a, 0.0, 1.0)
@@ -179,7 +188,7 @@ def _log_epoch_images(
             x_weight = x_hat.view(-1, 1, 1, 1)
             pred_recon = torch.clamp((x_weight * pred_a) + ((1.0 - x_weight) * pred_b), 0.0, 1.0)
 
-            metrics = compute_reconstruction_metrics(pred_a, pred_b, x_hat, a, b, c)
+            metrics = compute_reconstruction_metrics(pred_a, pred_b, x_hat, a, b, c, mask=mask)
             metrics.update(
                 {
                     "l1_a": float(F.l1_loss(pred_a, a).item()),
@@ -269,6 +278,7 @@ def train_model(config: Dict[str, Any]) -> None:
     c_dir = str(data_cfg.get("c_dir", "C"))
     extensions = data_cfg.get("extensions", [".png", ".tif", ".tiff"])
     preprocess_cfg = data_cfg.get("preprocess", {})
+    mask_enabled = bool(preprocess_cfg.get("mask", {}).get("enabled", True))
     val_split = float(data_cfg.get("val_split", 0.1))
     num_workers = int(data_cfg.get("num_workers", 0))
     weights_csv = data_cfg.get("weights_csv")
@@ -359,6 +369,8 @@ def train_model(config: Dict[str, Any]) -> None:
         logger.info("Resumed training from %s (epoch %d)", resume_path, start_epoch)
 
     image_log_cfg = _parse_image_log_config(logging_cfg, out_dir, seed)
+    if not mask_enabled and image_log_cfg.mask_metrics:
+        image_log_cfg = replace(image_log_cfg, mask_metrics=False)
     image_log_state = ImageLogState()
     if image_log_cfg.enabled:
         image_log_cfg.output_dir.mkdir(parents=True, exist_ok=True)
@@ -393,6 +405,7 @@ def train_model(config: Dict[str, Any]) -> None:
                 weight_loss_fn=weight_loss_fn,
                 loss_weights=loss_weights,
                 device=device,
+                mask_enabled=mask_enabled,
             )
             metrics.update(val_metrics)
             logger.info(
@@ -468,13 +481,13 @@ def train_model(config: Dict[str, Any]) -> None:
                 _log_epoch_images(
                     model,
                     log_dataset,
-                    image_log_cfg,
-                    image_log_state,
-                    device,
-                    epoch,
-                    logger,
-                    history,
-                )
+            image_log_cfg,
+            image_log_state,
+            device,
+            epoch,
+            logger,
+            history,
+        )
             except Exception as exc:
                 logger.error("Image logging failed: %s", exc)
 

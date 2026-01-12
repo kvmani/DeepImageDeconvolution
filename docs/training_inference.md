@@ -21,7 +21,7 @@ python3 scripts/run_train.py --config configs/train_debug.yaml --debug
 Outputs in `out_dir`:
 
 - `best.pt` and `last.pt` checkpoints
-- `history.json` with epoch metrics (including PSNR/SSIM and L2/MSE)
+- `history.json` with epoch metrics (including PSNR/SSIM, L2/MSE, and mask-aware variants when masking is enabled)
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
 
@@ -56,3 +56,10 @@ Outputs in `out_dir`:
 ## Logging
 
 Important outputs are logged to screen by default. Set `logging.log_to_file: true` to also write logs to `out_dir/output.log`.
+
+To append a timestamped run directory:
+
+```bash
+python3 scripts/run_train.py --config configs/train_default.yaml --run-tag baseline_01
+python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint outputs/train_run/best.pt --run-tag eval_01
+```

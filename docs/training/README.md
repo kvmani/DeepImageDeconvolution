@@ -4,7 +4,7 @@ This guide explains how to train the current baseline **dual-output U-Net** that
 
 ## What the training script does
 
-- Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG/TIF + metadata CSV).
+- Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG/TIF/BMP + metadata CSV).
 - Trains a dual-head U-Net with a combined loss: `L_ab` for `A/B`, `L_recon` for `C_hat = x_hat*A_hat + y_hat*B_hat`, and `L_x` for weight supervision.
 - Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), and the resolved config (`config_used.json`) to an output directory.
 - Periodically writes **visual monitoring** samples (8-bit PNGs) and an HTML index with per-epoch summaries and metric plots for quick inspection of training progress.
@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 2. Create a synthetic dataset with `A/`, `B/`, `C/` folders.
 
-The training pipeline expects **paired** 16-bit images (PNG/TIF) produced by `scripts/generate_data.py` (recommended).
+The training pipeline expects **paired** 16-bit images (PNG/TIF/BMP) produced by `scripts/generate_data.py` (recommended). If your sources include 8-bit or 32-bit BMP exports, prepare a canonical 16-bit copy first with `scripts/prepare_experimental_data.py`.
 
 ## Copy/paste commands
 
@@ -121,6 +121,7 @@ train:
 - `logging.image_log.output_dir`: `null` uses `<out_dir>/monitoring`; otherwise set a subfolder.
 - `logging.image_log.image_format`: `png` (recommended).
 - `logging.image_log.include_recon`: when `true`, logs `C_hat = x_hat*A_pred + y_hat*B_pred`.
+- `logging.image_log.mask_metrics`: when `true`, includes mask-aware metrics for circular detectors (default: true).
 
 Example snippet:
 
@@ -140,6 +141,7 @@ logging:
 - CLI `--out_dir ...` overrides `output.out_dir` without editing YAML.
 - CLI `--debug` uses `configs/train_debug.yaml` (unless you pass `--config`) and forces debug mode.
 - CLI `--seed ...` overrides `debug.seed` for reproducibility.
+- CLI `--run-tag ...` appends a timestamped suffix to the output directory for reproducible runs.
 
 ## Outputs
 
@@ -148,7 +150,7 @@ In `out_dir`:
 - `best.pt`: best checkpoint (lowest validation loss, if validation is enabled)
 - `last.pt`: latest checkpoint
 - `checkpoint_epoch_XXX.pt`: per-epoch checkpoints (controlled by `output.save_every`)
-- `history.json`: epoch-wise metrics (train/val loss, PSNR/SSIM/L2 when validation is enabled)
+- `history.json`: epoch-wise metrics (train/val loss, PSNR/SSIM/L2 plus mask-aware variants when validation is enabled)
 - `monitoring/index.html`: HTML report with per-epoch summary, metric plots, and sample images (8-bit previews) if enabled
 - `config_used.json`: resolved config snapshot for reproducibility
 - `output.log`: file logs (if `logging.log_to_file: true`)
@@ -158,5 +160,5 @@ Open `monitoring/index.html` in a browser to review training progress visually.
 ## Common issues
 
 - `No paired samples found...`: `data.root_dir` does not contain matching `A/`, `B/`, `C/` triplets.
-- `Expected 16-bit image...`: inputs are not `uint16` PNG/TIF; regenerate/convert inputs before training.
+- `Expected 16-bit image...`: inputs are not `uint16` PNG/TIF/BMP; regenerate or run `scripts/prepare_experimental_data.py` before training.
 - GPU OOM: reduce `train.batch_size`, `model.base_channels`, or `model.depth`.

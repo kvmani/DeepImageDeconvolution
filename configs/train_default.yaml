@@ -74,6 +74,7 @@ logging:
     image_format: png
     write_html: true
     include_recon: true
+    mask_metrics: true
 
 output:
   out_dir: outputs/train_run

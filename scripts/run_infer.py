@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.inference.infer import run_inference
 from src.utils.config import deep_update, load_config
 from src.utils.logging import get_logger
+from src.utils.run import resolve_run_dir
 
 
 DEFAULT_CONFIG = REPO_ROOT / "configs/infer_default.yaml"
@@ -25,6 +26,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint.")
     parser.add_argument("--out_dir", type=str, default=None, help="Override output directory.")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode.")
+    parser.add_argument(
+        "--run-tag",
+        type=str,
+        default=None,
+        help="Append a timestamped run tag to the output directory.",
+    )
     return parser.parse_args()
 
 
@@ -56,6 +63,12 @@ def main() -> None:
     base_config = load_base_config(args)
     overrides = build_overrides(args)
     config = deep_update(base_config, overrides)
+    if args.run_tag:
+        out_dir = Path(config.get("output", {}).get("out_dir", "outputs/infer_run"))
+        config.setdefault("output", {})["out_dir"] = str(
+            resolve_run_dir(out_dir, args.run_tag)
+        )
+        config.setdefault("output", {})["run_tag"] = args.run_tag
 
     logger.info("Starting inference")
     run_inference(config)

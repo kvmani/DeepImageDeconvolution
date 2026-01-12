@@ -16,9 +16,13 @@ This is the operational task list. Update it whenever priorities change, work is
 
 - [ ] Data: expand inputs using `data/raw/Double Pattern Data` and document preprocessing assumptions.
 - [ ] Data: decide the default mixing pipeline and weight distribution for training, then sync configs/docs.
-- [ ] Training: standardize experiment naming and output folder conventions for reproducibility.
+- [x] Training: standardize experiment naming and output folder conventions for reproducibility.
 - [ ] Metrics: export per-epoch metrics to CSV in addition to `history.json`.
 - [ ] Docs: add a short baseline-results section to `docs/training_inference.md`.
+- [x] Data: add a non-destructive preparation script for experimental BMPs with manifest checksums.
+- [x] Metrics: add mask-aware reconstruction metrics and surface them in monitoring.
+- [x] Workflow: add `--run-tag` to standardize timestamped output directories.
+- [x] Docs: add a manuscript-style methods document with equations and assumptions.
 
 ## Next
 

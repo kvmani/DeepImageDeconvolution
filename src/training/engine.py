@@ -5,8 +5,10 @@ from typing import Dict, Optional
 
 import torch
 from torch import nn
+import numpy as np
 
 from src.training.metrics import compute_reconstruction_metrics
+from src.preprocessing.mask import build_circular_mask
 
 
 def _log_shapes(logger, c: torch.Tensor, a: torch.Tensor, b: torch.Tensor) -> None:
@@ -136,6 +138,7 @@ def evaluate(
     weight_loss_fn: nn.Module,
     loss_weights: Dict[str, float],
     device: torch.device,
+    mask_enabled: bool = False,
 ) -> Dict[str, float]:
     """Run evaluation on a validation set."""
     model.eval()
@@ -155,6 +158,11 @@ def evaluate(
             a = batch["A"].to(device)
             b = batch["B"].to(device)
             x_true = batch["x"].to(device)
+            mask = None
+            if mask_enabled:
+                mask_np = build_circular_mask(c.shape[-2:])
+                mask = torch.from_numpy(mask_np.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+                mask = mask.to(device)
             pred_a, pred_b, x_hat = model(c)
             x_weight = x_hat.view(-1, 1, 1, 1)
             recon = (x_weight * pred_a) + ((1.0 - x_weight) * pred_b)
@@ -175,6 +183,7 @@ def evaluate(
                 b,
                 c,
                 x_true=x_true,
+                mask=mask,
             )
             for key, value in batch_metrics.items():
                 metrics_accum[key] = metrics_accum.get(key, 0.0) + float(value)

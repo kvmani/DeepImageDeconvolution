@@ -39,7 +39,7 @@ Example experimental patterns from the dual-phase steel dataset in `data/raw/Dou
   </tr>
 </table>
 
-> **Note:** Experimental samples in `data/raw/Double Pattern Data/` are stored as 16-bit BMP files. Keep them unchanged so downstream scripts continue to load the original data.
+> **Note:** Experimental samples in `data/raw/Double Pattern Data/` include BMPs and may be 8-bit or 32-bit container formats. Keep raw files unchanged and use the preparation script to create a canonical 16-bit grayscale copy under `data/processed/` when needed. See `docs/methods.md` for the bit-depth policy.
 
 ## Quickstart (synthetic data generation)
 
@@ -58,6 +58,17 @@ python3 scripts/generate_data.py --config configs/debug.yaml --debug --visualize
 ```
 
 Outputs are written to `data/synthetic/debug_run/` with a `metadata.csv` and debug panels under `data/synthetic/debug_run/debug/`.
+
+If you want to use experimental BMP inputs directly, prepare a canonical 16-bit copy first:
+
+```bash
+python3 scripts/prepare_experimental_data.py \
+  --input-dir "data/raw/Double Pattern Data" \
+  --output-dir "data/processed/Double Pattern Data" \
+  --output-format png \
+  --output-bit-depth 16
+```
+The script writes a `manifest.json` with checksums and conversion parameters under the output directory.
 
 ## Repository structure
 
@@ -92,10 +103,11 @@ Quick links:
 - `todo_list.md` for the current work list.
 - `docs/roadmap.md` for long-term phases and deliverables.
 - `docs/references.md` for centralized literature citations.
+- `docs/methods.md` for manuscript-style methods and evaluation protocol.
 
 ## Data generation overview
 
-The generator reads 16-bit PNG/TIF patterns, validates bit depth, optionally preprocesses (crop, denoise, circular mask, normalize, augment), and mixes pairs into synthetic patterns. Two pipelines are supported:
+The generator reads 16-bit PNG/TIF/BMP patterns, validates bit depth, optionally preprocesses (crop, denoise, circular mask, normalize, augment), and mixes pairs into synthetic patterns. If inputs are not 16-bit, prepare them first (see `scripts/prepare_experimental_data.py`). Two pipelines are supported:
 
 - `normalize_then_mix`: normalize A and B, then mix using weights.
 - `mix_then_normalize`: mix raw intensities, then normalize the mixture.
@@ -122,6 +134,12 @@ Train the dual-output U-Net with weight prediction with:
 
 ```bash
 python3 scripts/run_train.py --config configs/train_default.yaml --out_dir outputs/train_run
+```
+
+To standardize run naming, append a timestamped tag:
+
+```bash
+python3 scripts/run_train.py --config configs/train_default.yaml --run-tag baseline_01
 ```
 
 Run inference with a checkpoint:

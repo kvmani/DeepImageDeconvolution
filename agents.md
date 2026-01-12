@@ -20,6 +20,7 @@ If an indivudual folder has another agents.md use that for fine tuning the expec
 * **No Hidden Hard‑Coding**: All hyperparameters, file paths, and model sizes must be configurable via YAML or command‑line flags.  Single letters or magic numbers in code should either be removed or explained clearly.
 * **Logging and Error Handling**: Use a central logging module (`src/utils/logging.py`) to obtain loggers.  Log at appropriate levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`) and include context (e.g., file names, shapes, bit‑depths).  Catch exceptions gracefully and present actionable messages.
 * **Documentation Sync (Critical)**: Any change to code/scripts/configs that affects behavior, outputs, CLI flags, file formats, or assumptions **must** be reflected in documentation in the same change. Documentation must cover (1) usage/how-to-run, (2) algorithmic details, and (3) scientific assumptions/rationale in appropriate `.md` files. Create dedicated docs where helpful (e.g., under `docs/` or next to scripts) and ensure the top-level `README.md` links to them for discoverability.
+* **Todo List Maintenance (Critical)**: Keep `todo_list.md` updated and current. Add, complete, or reprioritize items whenever behavior or priorities change so the list reflects the real state of the project.
 
 ## 2. Repository Structure (Authoritative)
 

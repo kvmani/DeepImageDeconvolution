@@ -66,6 +66,29 @@ Outputs are written to `data/synthetic/debug_run/` with a `metadata.csv` and deb
 - `tests/` unit and integration tests
 - `configs/` YAML configuration files
 
+## Project Snapshot (features and status)
+
+Features implemented now:
+
+- Synthetic data generation with two mixing pipelines, circular masking, and smart normalization.
+- Paired dataset loading for triplets (C, A, B) with debug modes.
+- Baseline dual-output U-Net training and inference with sum-consistency loss.
+- Metrics (L1, L2, PSNR, SSIM) and HTML monitoring reports with per-epoch plots.
+- Interactive mixing experiments notebook.
+
+Current status:
+
+- End-to-end synthetic pipeline is functional and tested in debug mode.
+- Monitoring artifacts are written to `<out_dir>/monitoring` during training.
+- Experimental double-pattern data is included for reference and validation.
+- Advanced models (GAN/attention), orientation metrics, and packaging are still pending.
+
+Quick links:
+
+- `docs/status.md` for the read-only snapshot of the codebase.
+- `todo_list.md` for the current work list.
+- `docs/roadmap.md` for long-term phases and deliverables.
+
 ## Data generation overview
 
 The generator reads 16-bit PNG/TIF patterns, validates bit depth, optionally preprocesses (crop, denoise, circular mask, normalize, augment), and mixes pairs into synthetic patterns. Two pipelines are supported:
@@ -109,4 +132,4 @@ When enabled, training also writes an HTML image log under `<out_dir>/monitoring
 
 ## Documentation
 
-See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phased deliverables.
+See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phased deliverables. For a concise snapshot of the current implementation, read `docs/status.md` and keep `todo_list.md` updated with the active work list.

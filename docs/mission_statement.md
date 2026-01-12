@@ -4,7 +4,9 @@
 
 Electron‐backscatter diffraction (EBSD) experiments produce high dimensional **Kikuchi patterns** that encode the crystallographic orientation of polycrystalline materials.  In multi‑phase or textured materials two or more crystal orientations often overlap in a single EBSD scan, yielding a **mixed pattern** that is not easily interpreted.  The goal of this project is to build a reproducible pipeline that **generates synthetic mixed patterns** from known pure patterns and trains a machine learning model to **deconvolute** a mixed pattern back into its constituent pure patterns.
 
-This document sets out the scientific and engineering objectives, describes the data generation strategy and network choices, and articulates the principles that will guide development.  It emphasises **16‑bit data fidelity**, reproducibility across Windows/Linux and CPU/GPU environments, and modular design.  Throughout, we prioritise **clarity over complexity**—explicit reasoning about corner cases and algorithmic steps is preferred to clever but opaque implementations.
+This document sets out the scientific and engineering objectives, describes the data generation strategy and network choices, and articulates the principles that will guide development. It emphasises **16‑bit data fidelity**, reproducibility across Windows/Linux and CPU/GPU environments, and modular design. Throughout, we prioritise **clarity over complexity**—explicit reasoning about corner cases and algorithmic steps is preferred to clever but opaque implementations.
+
+Note: this mission statement describes the intended direction. For current implementation status and near-term tasks, see `docs/status.md` and `todo_list.md`.
 
 ### Problem Statement
 

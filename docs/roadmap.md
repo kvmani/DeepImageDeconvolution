@@ -1,6 +1,10 @@
 # Project Roadmap: Mixed Kikuchi Pattern Deconvolution
 
-This roadmap outlines the phases and deliverables needed to realise the mission described in `mission_statement.md`.  It should serve as a living document: update it as the project evolves, but resist the temptation to skip phases.  Each phase builds upon the previous ones to ensure a robust, reproducible solution.
+This roadmap outlines the phases and deliverables needed to realise the mission described in `mission_statement.md`. It should serve as a living document: update it as the project evolves, but resist the temptation to skip phases. Each phase builds upon the previous ones to ensure a robust, reproducible solution.
+
+## Current Status Snapshot
+
+For the current implementation snapshot and near-term tasks, see `docs/status.md` and `todo_list.md`. This roadmap is the long-term view; it is not a day-to-day task list.
 
 ## Phase 0 – Literature Survey and Requirements (Weeks 1–2)
 

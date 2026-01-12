@@ -2,7 +2,7 @@
 
 This folder contains real experimental Kikuchi patterns acquired from a dual-phase steel (BCC + FCC). These images are used to build and validate this project, generate test data, and benchmark mixing/deconvolution algorithms.
 
-> **Placeholder policy:** To keep the repository free of large binary files, the actual BMPs are replaced with SVG placeholders of the same base name. Replace the placeholders with the original 16-bit BMP files locally before running experiments.
+> **Data policy:** The original 16-bit BMP files are stored in this folder. Keep them unchanged so experiments and benchmarks remain reproducible.
 
 ## Dataset structure
 

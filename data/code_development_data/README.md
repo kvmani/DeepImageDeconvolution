@@ -1,9 +1,7 @@
-# Code Development Data (Placeholders)
+# Code Development Data
 
-This folder ships with SVG placeholders to avoid committing binary image files. Replace:
+This folder contains small 16-bit PNG samples for local development and testing:
 
-- `image_A.svg`
-- `image_B.svg`
-- `image_C.svg`
-
-with the real 16-bit PNG/TIF samples locally when running data generation or experiments.
+- `image_A.png`
+- `image_B.png`
+- `image_C.png`

@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
+*__pycache__
 .pytest_cache/
 .venv/
 venv/
@@ -16,3 +18,7 @@ outputs/
 
 # Notebooks
 .ipynb_checkpoints/
+
+# Python bytecode (override un-ignores)
+**/__pycache__/
+**/*.py[cod]

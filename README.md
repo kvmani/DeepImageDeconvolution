@@ -21,25 +21,25 @@ Example experimental patterns from the dual-phase steel dataset in `data/raw/Dou
 <table>
   <tr>
     <td align="center">
-      <img src="data/raw/Double%20Pattern%20Data/50-50%20Double%20Pattern/50-50_0.svg" width="220" alt="Mixed pattern C (50% BCC, 50% FCC)">
+      <img src="data/raw/Double%20Pattern%20Data/50-50%20Double%20Pattern/50-50_0.bmp" width="220" alt="Mixed pattern C (50% BCC, 50% FCC)">
       <br>
       C (mixed)
     </td>
     <td align="center" width="40">&rarr;</td>
     <td align="center">
-      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_BCC-1.svg" width="220" alt="Pure pattern A (BCC)">
+      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_BCC-1.bmp" width="220" alt="Pure pattern A (BCC)">
       <br>
       A (pure)
     </td>
     <td align="center">
-      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_FCC-1.svg" width="220" alt="Pure pattern B (FCC)">
+      <img src="data/raw/Double%20Pattern%20Data/Good%20Pattern/Perfect_FCC-1.bmp" width="220" alt="Pure pattern B (FCC)">
       <br>
       B (pure)
     </td>
   </tr>
 </table>
 
-> **Note:** This repository uses lightweight SVG placeholders in `data/raw/Double Pattern Data/` to avoid committing large binary files. Replace the placeholder SVGs with the real 16-bit PNG/BMP images locally when running experiments.
+> **Note:** Experimental samples in `data/raw/Double Pattern Data/` are stored as 16-bit BMP files. Keep them unchanged so downstream scripts continue to load the original data.
 
 ## Quickstart (synthetic data generation)
 

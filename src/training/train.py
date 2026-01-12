@@ -1,8 +1,7 @@
-"""Training loop for dual-output U-Net models."""
+"""Training loop for dual-output U-Net models with weight prediction."""
 from __future__ import annotations
 
 import json
-import math
 import random
 import logging
 from pathlib import Path
@@ -17,9 +16,13 @@ from torch.utils.data import DataLoader
 
 from src.datasets import KikuchiPairDataset, split_dataset
 from src.models import build_model
+from src.training.checkpoint import load_checkpoint, save_checkpoint
+from src.training.engine import evaluate, train_one_epoch
+from src.training.metrics import compute_reconstruction_metrics
+from src.training.optim import build_optimizer, build_scheduler
 from src.utils.logging import add_file_handler, get_logger
 from src.utils.io import write_image_8bit
-from src.utils.metrics import aggregate_metrics, mse
+from src.utils.metrics import aggregate_metrics
 from src.utils.reporting import update_image_log, write_image_log_html
 
 
@@ -28,72 +31,6 @@ def _set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def _create_optimizer(model: nn.Module, cfg: Dict[str, Any]) -> torch.optim.Optimizer:
-    lr = float(cfg.get("learning_rate", 1e-3))
-    weight_decay = float(cfg.get("weight_decay", 0.0))
-    optimizer_name = str(cfg.get("optimizer", "adam")).lower()
-    if optimizer_name == "adam":
-        return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    if optimizer_name == "adamw":
-        return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    if optimizer_name == "sgd":
-        momentum = float(cfg.get("momentum", 0.9))
-        return torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum)
-    raise ValueError(f"Unknown optimizer: {optimizer_name}")
-
-
-def _create_scheduler(optimizer: torch.optim.Optimizer, cfg: Dict[str, Any]) -> Optional[torch.optim.lr_scheduler._LRScheduler]:
-    sched_cfg = cfg.get("scheduler", {})
-    if not sched_cfg.get("enabled", False):
-        return None
-    sched_type = str(sched_cfg.get("type", "step")).lower()
-    if sched_type == "step":
-        step_size = int(sched_cfg.get("step_size", 25))
-        gamma = float(sched_cfg.get("gamma", 0.5))
-        return torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    if sched_type == "cosine":
-        t_max = int(sched_cfg.get("t_max", 50))
-        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=t_max)
-    raise ValueError(f"Unknown scheduler type: {sched_type}")
-
-
-def _log_shapes(logger, c: torch.Tensor, a: torch.Tensor, b: torch.Tensor) -> None:
-    logger.info(
-        "Input/target shapes: C=%s, A=%s, B=%s",
-        tuple(c.shape),
-        tuple(a.shape),
-        tuple(b.shape),
-    )
-
-
-def _validate_batch(logger, c: torch.Tensor, a: torch.Tensor, b: torch.Tensor) -> None:
-    if c.shape != a.shape or c.shape != b.shape:
-        raise ValueError(f"Shape mismatch: C={tuple(c.shape)} A={tuple(a.shape)} B={tuple(b.shape)}")
-    for name, tensor in (("C", c), ("A", a), ("B", b)):
-        if not torch.isfinite(tensor).all():
-            raise ValueError(f"Non-finite values detected in {name} batch.")
-        min_val = float(tensor.min().item())
-        max_val = float(tensor.max().item())
-        if min_val < -1e-3 or max_val > 1.0 + 1e-3:
-            logger.warning("%s values outside [0, 1]: min=%.4f max=%.4f", name, min_val, max_val)
-
-
-def _save_checkpoint(
-    path: Path,
-    model: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    epoch: int,
-    metrics: Dict[str, float],
-) -> None:
-    payload = {
-        "epoch": epoch,
-        "model_state": model.state_dict(),
-        "optimizer_state": optimizer.state_dict(),
-        "metrics": metrics,
-    }
-    torch.save(payload, path)
 
 
 @dataclass
@@ -107,7 +44,7 @@ class ImageLogConfig:
     output_dir: Path
     image_format: str
     write_html: bool
-    include_sum: bool
+    include_recon: bool
     seed: int
 
 
@@ -140,7 +77,7 @@ def _parse_image_log_config(logging_cfg: Dict[str, Any], out_dir: Path, seed: in
     if image_format not in ("png", "jpg", "jpeg"):
         image_format = "png"
     write_html = bool(cfg.get("write_html", True))
-    include_sum = bool(cfg.get("include_sum", True))
+    include_recon = bool(cfg.get("include_recon", cfg.get("include_sum", True)))
     log_seed = int(cfg.get("seed", seed))
     return ImageLogConfig(
         enabled=enabled,
@@ -152,7 +89,7 @@ def _parse_image_log_config(logging_cfg: Dict[str, Any], out_dir: Path, seed: in
         output_dir=output_path,
         image_format=image_format,
         write_html=write_html,
-        include_sum=include_sum,
+        include_recon=include_recon,
         seed=log_seed,
     )
 
@@ -236,28 +173,28 @@ def _log_epoch_images(
             a = sample["A"].unsqueeze(0).to(device)
             b = sample["B"].unsqueeze(0).to(device)
 
-            pred_a, pred_b = model(c)
+            pred_a, pred_b, x_hat = model(c)
             pred_a = torch.clamp(pred_a, 0.0, 1.0)
             pred_b = torch.clamp(pred_b, 0.0, 1.0)
-            pred_sum = torch.clamp(pred_a + pred_b, 0.0, 1.0)
+            x_weight = x_hat.view(-1, 1, 1, 1)
+            pred_recon = torch.clamp((x_weight * pred_a) + ((1.0 - x_weight) * pred_b), 0.0, 1.0)
 
-            metrics = {
-                "l1_a": float(F.l1_loss(pred_a, a).item()),
-                "l2_a": float(mse(pred_a, a).mean().item()),
-                "psnr_a": float(aggregate_metrics(pred_a, a)[0]),
-                "ssim_a": float(aggregate_metrics(pred_a, a)[1]),
-                "l1_b": float(F.l1_loss(pred_b, b).item()),
-                "l2_b": float(mse(pred_b, b).mean().item()),
-                "psnr_b": float(aggregate_metrics(pred_b, b)[0]),
-                "ssim_b": float(aggregate_metrics(pred_b, b)[1]),
-            }
-            if cfg.include_sum:
+            metrics = compute_reconstruction_metrics(pred_a, pred_b, x_hat, a, b, c)
+            metrics.update(
+                {
+                    "l1_a": float(F.l1_loss(pred_a, a).item()),
+                    "l1_b": float(F.l1_loss(pred_b, b).item()),
+                    "x_hat": float(x_hat.item()),
+                    "y_hat": float((1.0 - x_hat).item()),
+                }
+            )
+            if cfg.include_recon:
+                psnr_recon, ssim_recon = aggregate_metrics(pred_recon, c)
                 metrics.update(
                     {
-                        "l1_sum": float(F.l1_loss(pred_sum, c).item()),
-                        "l2_sum": float(mse(pred_sum, c).mean().item()),
-                        "psnr_sum": float(aggregate_metrics(pred_sum, c)[0]),
-                        "ssim_sum": float(aggregate_metrics(pred_sum, c)[1]),
+                        "l1_recon": float(F.l1_loss(pred_recon, c).item()),
+                        "psnr_recon": float(psnr_recon),
+                        "ssim_recon": float(ssim_recon),
                     }
                 )
 
@@ -269,16 +206,16 @@ def _log_epoch_images(
                 "A_pred": f"{epoch_dir.name}/{sample_id}/A_pred.{ext}",
                 "B_pred": f"{epoch_dir.name}/{sample_id}/B_pred.{ext}",
             }
-            if cfg.include_sum:
-                images["C_sum"] = f"{epoch_dir.name}/{sample_id}/C_sum.{ext}"
+            if cfg.include_recon:
+                images["C_hat"] = f"{epoch_dir.name}/{sample_id}/C_hat.{ext}"
 
             write_image_8bit(sample_dir / f"C.{ext}", _tensor_to_image(c))
             write_image_8bit(sample_dir / f"A_gt.{ext}", _tensor_to_image(a))
             write_image_8bit(sample_dir / f"B_gt.{ext}", _tensor_to_image(b))
             write_image_8bit(sample_dir / f"A_pred.{ext}", _tensor_to_image(pred_a))
             write_image_8bit(sample_dir / f"B_pred.{ext}", _tensor_to_image(pred_b))
-            if cfg.include_sum:
-                write_image_8bit(sample_dir / f"C_sum.{ext}", _tensor_to_image(pred_sum))
+            if cfg.include_recon:
+                write_image_8bit(sample_dir / f"C_hat.{ext}", _tensor_to_image(pred_recon))
 
             samples_log.append(
                 {
@@ -334,6 +271,9 @@ def train_model(config: Dict[str, Any]) -> None:
     preprocess_cfg = data_cfg.get("preprocess", {})
     val_split = float(data_cfg.get("val_split", 0.1))
     num_workers = int(data_cfg.get("num_workers", 0))
+    weights_csv = data_cfg.get("weights_csv")
+    require_weights = bool(data_cfg.get("require_weights", True))
+    weight_tolerance = float(data_cfg.get("weight_tolerance", 1e-3))
 
     sample_limit = debug_cfg.get("sample_limit") if debug_enabled else None
     dataset = KikuchiPairDataset(
@@ -345,6 +285,9 @@ def train_model(config: Dict[str, Any]) -> None:
         preprocess_cfg=preprocess_cfg,
         seed=seed,
         limit=sample_limit,
+        weights_csv=Path(weights_csv) if weights_csv else None,
+        require_weights=require_weights,
+        weight_tolerance=weight_tolerance,
     )
     train_set, val_set = split_dataset(dataset, val_split, seed)
 
@@ -386,19 +329,34 @@ def train_model(config: Dict[str, Any]) -> None:
     model = build_model(model_cfg).to(device)
     param_count = sum(p.numel() for p in model.parameters())
     logger.info("Model parameters: %d", param_count)
-    optimizer = _create_optimizer(model, train_cfg)
-    scheduler = _create_scheduler(optimizer, train_cfg)
+    optimizer = build_optimizer(model, train_cfg)
+    scheduler, scheduler_step_per_batch = build_scheduler(
+        optimizer,
+        train_cfg,
+        steps_per_epoch=len(train_loader),
+        epochs=epochs,
+    )
 
     loss_weights = train_cfg.get("loss", {})
-    lambda_a = float(loss_weights.get("lambda_a", 1.0))
-    lambda_b = float(loss_weights.get("lambda_b", 1.0))
-    lambda_sum = float(loss_weights.get("lambda_sum", 0.5))
-
     loss_fn = nn.L1Loss()
+    weight_loss_fn = nn.SmoothL1Loss()
     grad_clip = float(train_cfg.get("grad_clip", 0.0))
 
-    best_val = math.inf
+    best_val = float("inf")
     history = []
+    start_epoch = 1
+    global_step = 0
+
+    resume_path = train_cfg.get("resume_from")
+    if resume_path:
+        resume_path = Path(resume_path)
+        if not resume_path.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+        checkpoint = load_checkpoint(resume_path, model, optimizer, scheduler)
+        start_epoch = int(checkpoint.get("epoch", 0)) + 1
+        global_step = int(checkpoint.get("step", 0))
+        best_val = float(checkpoint.get("metrics", {}).get("val_loss", best_val))
+        logger.info("Resumed training from %s (epoch %d)", resume_path, start_epoch)
 
     image_log_cfg = _parse_image_log_config(logging_cfg, out_dir, seed)
     image_log_state = ImageLogState()
@@ -411,130 +369,94 @@ def train_model(config: Dict[str, Any]) -> None:
             image_log_cfg.split,
         )
 
-    for epoch in range(1, epochs + 1):
-        model.train()
-        epoch_loss = 0.0
-        for batch_idx, batch in enumerate(train_loader, start=1):
-            c = batch["C"].to(device)
-            a = batch["A"].to(device)
-            b = batch["B"].to(device)
-
-            if epoch == 1 and batch_idx == 1:
-                _log_shapes(logger, c, a, b)
-                _validate_batch(logger, c, a, b)
-
-            optimizer.zero_grad()
-            pred_a, pred_b = model(c)
-            loss_a = loss_fn(pred_a, a)
-            loss_b = loss_fn(pred_b, b)
-            loss_sum = loss_fn(pred_a + pred_b, c)
-            loss = lambda_a * loss_a + lambda_b * loss_b + lambda_sum * loss_sum
-            loss.backward()
-            if grad_clip > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            optimizer.step()
-
-            epoch_loss += float(loss.item())
-            if batch_idx % log_interval == 0:
-                logger.info(
-                    "Epoch %d/%d | Batch %d/%d | Loss %.6f",
-                    epoch,
-                    epochs,
-                    batch_idx,
-                    len(train_loader),
-                    loss.item(),
-                )
-
-        epoch_loss /= max(len(train_loader), 1)
-        metrics = {"train_loss": epoch_loss}
+    for epoch in range(start_epoch, epochs + 1):
+        metrics = train_one_epoch(
+            model=model,
+            loader=train_loader,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            weight_loss_fn=weight_loss_fn,
+            loss_weights=loss_weights,
+            device=device,
+            logger=logger,
+            log_interval=log_interval,
+            grad_clip=grad_clip,
+            scheduler=scheduler,
+            scheduler_step_per_batch=scheduler_step_per_batch,
+        )
 
         if val_loader is not None:
-            model.eval()
-            val_loss = 0.0
-            psnr_a = 0.0
-            ssim_a = 0.0
-            psnr_b = 0.0
-            ssim_b = 0.0
-            l2_a = 0.0
-            l2_b = 0.0
-            l2_sum = 0.0
-            with torch.no_grad():
-                for batch in val_loader:
-                    c = batch["C"].to(device)
-                    a = batch["A"].to(device)
-                    b = batch["B"].to(device)
-                    pred_a, pred_b = model(c)
-                    loss_a = loss_fn(pred_a, a)
-                    loss_b = loss_fn(pred_b, b)
-                    loss_sum = loss_fn(pred_a + pred_b, c)
-                    loss = lambda_a * loss_a + lambda_b * loss_b + lambda_sum * loss_sum
-                    val_loss += float(loss.item())
-
-                    batch_psnr_a, batch_ssim_a = aggregate_metrics(pred_a, a)
-                    batch_psnr_b, batch_ssim_b = aggregate_metrics(pred_b, b)
-                    psnr_a += batch_psnr_a
-                    ssim_a += batch_ssim_a
-                    psnr_b += batch_psnr_b
-                    ssim_b += batch_ssim_b
-                    l2_a += float(mse(pred_a, a).mean().item())
-                    l2_b += float(mse(pred_b, b).mean().item())
-                    l2_sum += float(mse(pred_a + pred_b, c).mean().item())
-
-            val_loss /= max(len(val_loader), 1)
-            psnr_a /= max(len(val_loader), 1)
-            ssim_a /= max(len(val_loader), 1)
-            psnr_b /= max(len(val_loader), 1)
-            ssim_b /= max(len(val_loader), 1)
-            l2_a /= max(len(val_loader), 1)
-            l2_b /= max(len(val_loader), 1)
-            l2_sum /= max(len(val_loader), 1)
-
-            metrics.update(
-                {
-                    "val_loss": val_loss,
-                    "psnr_a": psnr_a,
-                    "ssim_a": ssim_a,
-                    "psnr_b": psnr_b,
-                    "ssim_b": ssim_b,
-                    "l2_a": l2_a,
-                    "l2_b": l2_b,
-                    "l2_sum": l2_sum,
-                }
+            val_metrics = evaluate(
+                model=model,
+                loader=val_loader,
+                loss_fn=loss_fn,
+                weight_loss_fn=weight_loss_fn,
+                loss_weights=loss_weights,
+                device=device,
             )
+            metrics.update(val_metrics)
             logger.info(
-                "Epoch %d/%d | Train %.6f | Val %.6f | PSNR A/B %.3f/%.3f | SSIM A/B %.3f/%.3f | L2 A/B %.6f/%.6f",
+                "Epoch %d/%d | Train %.6f | Val %.6f | L_ab %.6f | L_recon %.6f | L_x %.6f | x_hat μ/σ %.3f/%.3f",
                 epoch,
                 epochs,
-                epoch_loss,
-                val_loss,
-                psnr_a,
-                psnr_b,
-                ssim_a,
-                ssim_b,
-                l2_a,
-                l2_b,
+                metrics["train_loss"],
+                metrics["val_loss"],
+                metrics.get("val_l_ab", 0.0),
+                metrics.get("val_l_recon", 0.0),
+                metrics.get("val_l_x", 0.0),
+                metrics.get("x_hat_mean", 0.0),
+                metrics.get("x_hat_std", 0.0),
             )
         else:
-            logger.info("Epoch %d/%d | Train %.6f", epoch, epochs, epoch_loss)
+            logger.info("Epoch %d/%d | Train %.6f", epoch, epochs, metrics["train_loss"])
 
         history.append({"epoch": epoch, **metrics})
 
-        if scheduler is not None:
+        global_step += len(train_loader)
+
+        if scheduler is not None and not scheduler_step_per_batch:
             scheduler.step()
 
         last_path = out_dir / "last.pt"
-        _save_checkpoint(last_path, model, optimizer, epoch, metrics)
+        save_checkpoint(
+            last_path,
+            model,
+            optimizer,
+            epoch,
+            metrics,
+            scheduler=scheduler,
+            step=global_step,
+            config=config,
+        )
 
         if output_cfg.get("save_every", 1) and epoch % int(output_cfg.get("save_every", 1)) == 0:
             checkpoint_path = out_dir / f"checkpoint_epoch_{epoch:03d}.pt"
-            _save_checkpoint(checkpoint_path, model, optimizer, epoch, metrics)
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                epoch,
+                metrics,
+                scheduler=scheduler,
+                step=global_step,
+                config=config,
+            )
 
         if output_cfg.get("save_best", True):
             current_val = metrics.get("val_loss", metrics["train_loss"])
             if current_val < best_val:
                 best_val = current_val
                 best_path = out_dir / "best.pt"
-                _save_checkpoint(best_path, model, optimizer, epoch, metrics)
+                save_checkpoint(
+                    best_path,
+                    model,
+                    optimizer,
+                    epoch,
+                    metrics,
+                    scheduler=scheduler,
+                    step=global_step,
+                    config=config,
+                )
 
         if image_log_cfg.enabled and epoch % image_log_cfg.interval == 0:
             log_dataset = train_set

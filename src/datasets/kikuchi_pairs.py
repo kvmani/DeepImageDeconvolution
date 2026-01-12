@@ -8,6 +8,7 @@ from typing import Dict, Optional, Sequence, Tuple
 import numpy as np
 import torch
 from torch.utils.data import Dataset, random_split
+import csv
 
 from src.preprocessing.mask import apply_circular_mask, build_mask_with_metadata
 from src.preprocessing.normalise import normalize_with_metadata
@@ -138,7 +139,7 @@ class KikuchiPairDataset(Dataset):
 
     Notes
     -----
-    Each sample returns a dict with keys: ``C``, ``A``, ``B``, and ``sample_id``.
+    Each sample returns a dict with keys: ``C``, ``A``, ``B``, ``x``, and ``sample_id``.
     Tensors are float32 in [0, 1] with shape ``(1, H, W)``.
     """
 
@@ -152,12 +153,16 @@ class KikuchiPairDataset(Dataset):
         preprocess_cfg: Dict,
         seed: int = 42,
         limit: Optional[int] = None,
+        weights_csv: Optional[Path] = None,
+        require_weights: bool = True,
+        weight_tolerance: float = 1e-3,
     ) -> None:
         self.logger = get_logger(__name__)
         self.root_dir = root_dir
         self.extensions = extensions
         self.preprocess = _parse_preprocess_cfg(preprocess_cfg)
         self.seed = int(seed)
+        self.weight_tolerance = float(weight_tolerance)
 
         a_dir = root_dir / a_dir
         b_dir = root_dir / b_dir
@@ -181,6 +186,43 @@ class KikuchiPairDataset(Dataset):
         self.a_map = a_map
         self.b_map = b_map
         self.c_map = c_map
+        self.x_map = self._load_weights(root_dir, weights_csv, require_weights)
+
+    def _load_weights(
+        self,
+        root_dir: Path,
+        weights_csv: Optional[Path],
+        require_weights: bool,
+    ) -> Dict[str, float]:
+        if weights_csv is None:
+            candidate = root_dir / "metadata.csv"
+            weights_csv = candidate if candidate.exists() else None
+        if weights_csv is None:
+            if require_weights:
+                raise ValueError(
+                    "Weights CSV not found. Provide data.weights_csv or place metadata.csv in root_dir."
+                )
+            return {}
+        if not weights_csv.exists():
+            raise FileNotFoundError(f"Weights CSV not found: {weights_csv}")
+
+        x_map: Dict[str, float] = {}
+        with weights_csv.open("r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                sample_id = row.get("sample_id")
+                if not sample_id:
+                    continue
+                if "x" in row and row["x"] != "":
+                    x_val = float(row["x"])
+                elif "weight_a" in row and row["weight_a"] != "":
+                    x_val = float(row["weight_a"])
+                else:
+                    continue
+                x_map[sample_id] = x_val
+        if require_weights and not x_map:
+            raise ValueError(f"No weights found in {weights_csv}.")
+        return x_map
 
     def __len__(self) -> int:
         return len(self.sample_ids)
@@ -231,10 +273,23 @@ class KikuchiPairDataset(Dataset):
         image_b = _apply_preprocess(image_b, self.preprocess, mask)
         image_c = _apply_preprocess(image_c, self.preprocess, mask)
 
+        if self.x_map:
+            if sample_id not in self.x_map:
+                raise ValueError(f"Missing weight for sample_id {sample_id}.")
+            x_val = float(self.x_map[sample_id])
+            if not 0.0 <= x_val <= 1.0:
+                raise ValueError(f"x must be in [0, 1], got {x_val} for {sample_id}.")
+            y_val = 1.0 - x_val
+            if abs((x_val + y_val) - 1.0) > self.weight_tolerance:
+                raise ValueError(f"x + y must be 1 for {sample_id}.")
+        else:
+            x_val = 0.5
+
         return {
             "C": torch.from_numpy(image_c).unsqueeze(0),
             "A": torch.from_numpy(image_a).unsqueeze(0),
             "B": torch.from_numpy(image_b).unsqueeze(0),
+            "x": torch.tensor([x_val], dtype=torch.float32),
             "sample_id": sample_id,
         }
 

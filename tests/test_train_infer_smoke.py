@@ -24,13 +24,21 @@ def test_train_and_infer_smoke(tmp_path: Path) -> None:
     c_dir.mkdir(parents=True)
 
     rng = np.random.default_rng(123)
+    metadata_lines = ["sample_id,x,y,weight_a,weight_b"]
     for idx in range(2):
         a = (rng.random((16, 16)) * 65535).astype(np.uint16)
         b = (rng.random((16, 16)) * 65535).astype(np.uint16)
-        c = ((0.5 * a + 0.5 * b)).astype(np.uint16)
+        x = 0.55 if idx == 0 else 0.35
+        y = 1.0 - x
+        c = ((x * a + y * b)).astype(np.uint16)
         _write_sample(a_dir / f"sample_{idx:03d}_A.png", a)
         _write_sample(b_dir / f"sample_{idx:03d}_B.png", b)
         _write_sample(c_dir / f"sample_{idx:03d}_C.png", c)
+        metadata_lines.append(
+            f"sample_{idx:03d},{x:.4f},{y:.4f},{x:.4f},{y:.4f}"
+        )
+
+    (tmp_path / "data" / "metadata.csv").write_text("\n".join(metadata_lines))
 
     train_out = tmp_path / "train_out"
     train_config = {
@@ -44,6 +52,7 @@ def test_train_and_infer_smoke(tmp_path: Path) -> None:
             "shuffle": True,
             "num_workers": 0,
             "preprocess": {"normalize": {"enabled": False}},
+            "require_weights": True,
         },
         "model": {
             "name": "unet_dual",
@@ -63,7 +72,7 @@ def test_train_and_infer_smoke(tmp_path: Path) -> None:
             "weight_decay": 0.0,
             "optimizer": "adam",
             "scheduler": {"enabled": False},
-            "loss": {"lambda_a": 1.0, "lambda_b": 1.0, "lambda_sum": 0.5},
+            "loss": {"lambda_ab": 1.0, "lambda_recon": 0.5, "lambda_x": 0.1},
             "grad_clip": 0.0,
         },
         "logging": {"log_to_file": False, "log_level": "ERROR", "log_interval": 1},
@@ -90,7 +99,12 @@ def test_train_and_infer_smoke(tmp_path: Path) -> None:
             "clamp_outputs": True,
         },
         "postprocess": {"apply_mask": False},
-        "output": {"out_dir": str(infer_out), "format": "png", "save_sum": True},
+        "output": {
+            "out_dir": str(infer_out),
+            "format": "png",
+            "save_recon": True,
+            "save_weights": True,
+        },
         "logging": {"log_to_file": False, "log_level": "ERROR"},
         "debug": {"enabled": True, "seed": 1, "sample_limit": 2},
     }
@@ -98,3 +112,4 @@ def test_train_and_infer_smoke(tmp_path: Path) -> None:
     run_inference(infer_config)
     assert (infer_out / "A").exists()
     assert (infer_out / "B").exists()
+    assert (infer_out / "weights.csv").exists()

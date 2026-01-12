@@ -50,14 +50,25 @@ def write_image_log_html(
     metric_columns = [
         "epoch",
         "train_loss",
+        "train_l_ab",
+        "train_l_recon",
+        "train_l_x",
         "val_loss",
+        "val_l_ab",
+        "val_l_recon",
+        "val_l_x",
         "psnr_a",
         "psnr_b",
         "ssim_a",
         "ssim_b",
         "l2_a",
         "l2_b",
-        "l2_sum",
+        "l2_recon",
+        "x_mae",
+        "x_hat_mean",
+        "x_hat_std",
+        "x_hat_min",
+        "x_hat_max",
     ]
     metric_columns = [
         key
@@ -144,10 +155,15 @@ def write_image_log_html(
                 "<div class=\"chart\"><h3>L2 (A/B)</h3>"
                 "<canvas id=\"chart-l2\" width=\"520\" height=\"220\"></canvas></div>"
             )
-        if any("l2_sum" in entry for entry in sanitized_history):
+        if any("l2_recon" in entry for entry in sanitized_history):
             lines.append(
-                "<div class=\"chart\"><h3>L2 Sum</h3>"
-                "<canvas id=\"chart-l2-sum\" width=\"520\" height=\"220\"></canvas></div>"
+                "<div class=\"chart\"><h3>L2 Recon</h3>"
+                "<canvas id=\"chart-l2-recon\" width=\"520\" height=\"220\"></canvas></div>"
+            )
+        if any("x_mae" in entry for entry in sanitized_history):
+            lines.append(
+                "<div class=\"chart\"><h3>x MAE</h3>"
+                "<canvas id=\"chart-x-mae\" width=\"520\" height=\"220\"></canvas></div>"
             )
         lines.append("</div>")
         lines.append("<script>")
@@ -245,9 +261,14 @@ def write_image_log_html(
             "    { key: 'l2_b', label: 'B', color: '#7f7f7f' }\n"
             "  ]);\n"
             "}\n"
-            "if (document.getElementById('chart-l2-sum')) {\n"
-            "  renderChart('chart-l2-sum', 'l2 sum', [\n"
-            "    { key: 'l2_sum', label: 'sum', color: '#bcbd22' }\n"
+            "if (document.getElementById('chart-l2-recon')) {\n"
+            "  renderChart('chart-l2-recon', 'l2 recon', [\n"
+            "    { key: 'l2_recon', label: 'recon', color: '#bcbd22' }\n"
+            "  ]);\n"
+            "}\n"
+            "if (document.getElementById('chart-x-mae')) {\n"
+            "  renderChart('chart-x-mae', 'x mae', [\n"
+            "    { key: 'x_mae', label: 'x', color: '#ff9896' }\n"
             "  ]);\n"
             "}\n"
         )
@@ -256,7 +277,7 @@ def write_image_log_html(
         lines.append("<h2>Per-Epoch Summary</h2>")
         lines.append("<p>No history data available yet.</p>")
 
-    image_order = ["C", "A_gt", "B_gt", "A_pred", "B_pred", "C_sum"]
+    image_order = ["C", "A_gt", "B_gt", "A_pred", "B_pred", "C_hat"]
 
     for entry in entries:
         epoch = entry.get("epoch", "?")

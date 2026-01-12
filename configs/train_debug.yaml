@@ -25,6 +25,9 @@ data:
       flip_horizontal: true
       flip_vertical: true
       rotate90: true
+  weights_csv: null
+  require_weights: true
+  weight_tolerance: 1.0e-3
 
 model:
   name: unet_dual
@@ -44,14 +47,16 @@ train:
   weight_decay: 0.0
   optimizer: adam
   scheduler:
-    enabled: false
-    type: step
-    step_size: 10
-    gamma: 0.5
+    name: one_cycle
+    max_lr: 2.0e-4
+    pct_start: 0.35
+    div_factor: 20
+    final_div_factor: 1.0e4
+    anneal_strategy: cos
   loss:
-    lambda_a: 1.0
-    lambda_b: 1.0
-    lambda_sum: 0.5
+    lambda_ab: 1.0
+    lambda_recon: 0.5
+    lambda_x: 0.1
   grad_clip: 0.0
 
 logging:
@@ -68,7 +73,7 @@ logging:
     output_dir: null
     image_format: png
     write_html: true
-    include_sum: true
+    include_recon: true
 
 output:
   out_dir: outputs/train_debug

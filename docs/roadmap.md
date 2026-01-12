@@ -76,7 +76,7 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 **Objectives:**
 
 * Develop inference scripts in `src/inference/infer.py` capable of loading a trained model and applying it to new mixed patterns.  The script should output deconvoluted 16‑bit images and optionally overlay difference maps.
-* Implement post‑processing to ensure that the predicted \(\hat{A}\) and \(\hat{B}\) sum to the input \(C\) and that intensities remain within bounds.
+* Implement post‑processing to ensure that the predicted \(\hat{A}\), \(\hat{B}\), and \(\hat{x}\) reconstruct the input \(C\) via \(\hat{C} = \hat{x}\hat{A} + (1-\hat{x})\hat{B}\) and that intensities remain within bounds.
 
 **Deliverables:**
 

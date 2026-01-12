@@ -17,7 +17,7 @@ The generator produces a paired dataset with:
 - `data/synthetic/A/` pure A images
 - `data/synthetic/B/` pure B images
 - `data/synthetic/C/` mixed images
-- `data/synthetic/metadata.csv` with weights, provenance, and mask/normalization flags
+- `data/synthetic/metadata.csv` with weights (`x`, `y`), provenance, and mask/normalization flags
 - `data/synthetic/config_used.json` capturing the configuration
 - `data/synthetic/debug/` debug panels (optional)
 
@@ -43,7 +43,7 @@ Key options:
 
 1. `normalize_then_mix`
    - Normalize each input pattern independently.
-   - Mix with weights `wA` and `wB`.
+   - Mix with weights `x` and `y` (`x + y = 1`).
    - Optionally normalize the mixture (disabled by default to preserve sum checks).
    - If mixture normalization is enabled, `data.mix.normalize_smart` controls whether mask-aware stats are used.
 
@@ -76,7 +76,7 @@ Enable `debug.visualize` to save annotated panels per sample. Each panel include
 
 - A and B with min/max values, mask status, and source filenames
 - C with weights and pipeline info
-- Difference map `C - (wA*A + wB*B)`
+   - Difference map `C - (x*A + y*B)`
 
 These panels help verify the synthetic mixing behavior quickly.
 

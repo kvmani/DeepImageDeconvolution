@@ -4,13 +4,13 @@ This document gives a quick, read-only snapshot of the current codebase: what wo
 
 ## Purpose
 
-Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) from pure patterns (A, B) and train a model to deconvolve C back into A and B, while preserving 16-bit fidelity.
+Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) from pure patterns (A, B) and train a model to deconvolve C back into A and B while predicting mixing weights x and y, preserving 16-bit fidelity.
 
 ## Current Features (Implemented)
 
 - Synthetic data generation with two pipelines (`normalize_then_mix`, `mix_then_normalize`), optional blur/noise, circular masking, and smart normalization.
-- Paired dataset loaders for triplets (C, A, B) with debug sampling controls.
-- Baseline dual-output U-Net model with sum-consistency loss.
+- Paired dataset loaders for triplets (C, A, B, x) with debug sampling controls.
+- Baseline dual-output U-Net model with physics-aware reconstruction and weight supervision.
 - Training and inference CLI wrappers driven by YAML configs and debug modes.
 - Metrics in training (L1, L2, PSNR, SSIM) and periodic HTML monitoring with per-epoch summaries and plots.
 - Interactive mixing experiments notebook for exploring mixing strategies and parameters.

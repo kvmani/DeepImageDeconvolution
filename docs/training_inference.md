@@ -36,6 +36,7 @@ With input mixed pattern **C** shaped `(B, 1, 256, 256)` and `depth=4`, `base_ch
 - Bottleneck: `(B, 512, 16, 16)`
 - Decoder output (per head): `(B, 32, 256, 256)`
 - Final outputs `A_pred`, `B_pred`: `(B, 1, 256, 256)`
+- Weight head output `x_hat`: `(B, 1)` with `y_hat = 1 - x_hat`
 
 ## Inference
 
@@ -48,7 +49,8 @@ python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint ou
 Outputs in `out_dir`:
 
 - `A/` and `B/` predicted 16-bit patterns
-- `C_sum/` reconstructed mixture `A+B` (optional)
+- `C_hat/` reconstructed mixture `x_hat * A_hat + y_hat * B_hat` (optional)
+- `weights.csv` with `x_hat` and `y_hat` per sample (optional)
 - `config_used.json` and `output.log` (if enabled)
 
 ## Logging

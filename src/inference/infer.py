@@ -1,4 +1,4 @@
-"""Inference pipeline for dual-output U-Net models."""
+"""Inference pipeline for dual-output U-Net models with weight prediction."""
 from __future__ import annotations
 
 import json
@@ -85,18 +85,22 @@ def run_inference(config: Dict[str, Any]) -> None:
         raise ValueError("output.format must be one of: png, tif, tiff.")
     suffix = ".tif" if output_format in ("tif", "tiff") else ".png"
 
-    save_sum = bool(output_cfg.get("save_sum", True))
+    save_recon = bool(output_cfg.get("save_recon", output_cfg.get("save_sum", True)))
+    save_weights = bool(output_cfg.get("save_weights", True))
     clamp_outputs = bool(inference_cfg.get("clamp_outputs", True))
 
     (out_dir / "A").mkdir(parents=True, exist_ok=True)
     (out_dir / "B").mkdir(parents=True, exist_ok=True)
-    if save_sum:
-        (out_dir / "C_sum").mkdir(parents=True, exist_ok=True)
+    if save_recon:
+        (out_dir / "C_hat").mkdir(parents=True, exist_ok=True)
+
+    weight_rows = []
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader, start=1):
             c = batch["C"].to(device)
-            pred_a, pred_b = model(c)
+            pred_a, pred_b, x_hat = model(c)
+            y_hat = 1.0 - x_hat
 
             if clamp_outputs:
                 pred_a = pred_a.clamp(0.0, 1.0)
@@ -119,11 +123,31 @@ def run_inference(config: Dict[str, Any]) -> None:
                 b_img = pred_b[i, 0].cpu().numpy()
                 write_image_16bit(out_dir / "A" / f"{sample_id}_A{suffix}", a_img)
                 write_image_16bit(out_dir / "B" / f"{sample_id}_B{suffix}", b_img)
-                if save_sum:
-                    sum_img = (a_img + b_img).clip(0.0, 1.0)
-                    write_image_16bit(out_dir / "C_sum" / f"{sample_id}_C{suffix}", sum_img)
+                if save_recon:
+                    recon = (
+                        float(x_hat[i].item()) * a_img + float(y_hat[i].item()) * b_img
+                    ).clip(0.0, 1.0)
+                    write_image_16bit(out_dir / "C_hat" / f"{sample_id}_C{suffix}", recon)
+                if save_weights:
+                    weight_rows.append(
+                        {
+                            "sample_id": sample_id,
+                            "x_hat": float(x_hat[i].item()),
+                            "y_hat": float(y_hat[i].item()),
+                        }
+                    )
 
             if batch_idx == 1:
                 logger.info("Processed batch %d with C shape %s", batch_idx, tuple(c.shape))
+
+    if save_weights and weight_rows:
+        weights_path = out_dir / "weights.csv"
+        weights_path.write_text(
+            "sample_id,x_hat,y_hat\n"
+            + "\n".join(
+                f"{row['sample_id']},{row['x_hat']:.6f},{row['y_hat']:.6f}"
+                for row in weight_rows
+            )
+        )
 
     logger.info("Inference outputs saved to %s", out_dir)

@@ -4,6 +4,10 @@ This is the operational task list. Update it whenever priorities change, work is
 
 ## Main Next Tasks (Priority)
 
+- [x] Objective: update pipeline to predict mixing weights (x, y) alongside A and B.
+- [x] Models: implement `src/models/` with Dual U-Net blocks and factory.
+- [x] Training: add One-Cycle LR policy and refactor training into engine/optim/checkpoint/metrics modules.
+- [x] Docs: add Dual U-Net architecture documentation and centralized IEEE references.
 - [ ] Data: build a larger synthetic dataset and record the exact config and version in docs.
 - [ ] Training: run a baseline training on that dataset and capture key metrics plus monitoring output.
 - [ ] Evaluation: add a CLI evaluation report (PSNR/SSIM/L2) and a CI workflow for pytest + debug smoke runs.

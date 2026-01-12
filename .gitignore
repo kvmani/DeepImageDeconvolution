@@ -9,6 +9,8 @@ venv/
 # Data and outputs
 data/synthetic/
 models/
+!src/models/
+!src/models/**
 logs/
 outputs/
 

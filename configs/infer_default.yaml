@@ -37,7 +37,8 @@ postprocess:
 output:
   out_dir: outputs/infer_run
   format: png
-  save_sum: true
+  save_recon: true
+  save_weights: true
 
 logging:
   log_to_file: true

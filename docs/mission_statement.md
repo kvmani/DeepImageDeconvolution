@@ -10,16 +10,16 @@ Note: this mission statement describes the intended direction. For current imple
 
 ### Problem Statement
 
-Given two 16‑bit grayscale Kikuchi patterns **A** and **B**, we form a mixed pattern **C** by combining them with some weighting:  
+Given two 16‑bit grayscale Kikuchi patterns **A** and **B**, we form a mixed pattern **C** by combining them with weights **x** and **y**:  
 
-\[C = \mathrm{normalize}(w_A \cdot A + w_B \cdot B),\quad w_A + w_B = 1.\]
+\[C = \mathrm{normalize}(x \cdot A + y \cdot B),\quad x + y = 1,\; x,y \in [0,1].\]
 
 Example experimental patterns in this repository live under `data/raw/Double Pattern Data/` (dual-phase steel: BCC + FCC). For instance, `data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp` (A) and `data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp` (B) are pure references, while `data/raw/Double Pattern Data/50-50 Double Pattern/50-50_0.bmp` is a mixed pattern.
 
 The task is twofold:
 
-1. **Data generation** – starting from a small set of high quality pure patterns, generate realistic mixed patterns \(C\) and paired ground truth \(A,B\) images at scale.  The generation procedure must preserve the dynamic range of the input (16‑bit) and simulate real mixing physics (e.g., detector point spread, intensity normalisation, noise).
-2. **Pattern deconvolution** – design and train a neural network that, given \(C\), simultaneously predicts \(A\) and \(B\).  The network should learn the inverse of the linear mixing process while respecting physical constraints (non‑negativity, intensity range) and generalise beyond the synthetic training data.
+1. **Data generation** – starting from a small set of high quality pure patterns, generate realistic mixed patterns \(C\) and paired ground truth \(A,B,x,y\) data at scale.  The generation procedure must preserve the dynamic range of the input (16‑bit) and simulate real mixing physics (e.g., detector point spread, intensity normalisation, noise).
+2. **Pattern deconvolution** – design and train a neural network that, given \(C\), simultaneously predicts \(A\), \(B\), and the mixing weights \(x\), \(y\).  The network should learn the inverse of the linear mixing process while respecting physical constraints (non‑negativity, intensity range) and generalise beyond the synthetic training data.
 
 Successfully solving this problem will enable automated phase separation and orientation analysis in EBSD without manual masking or pattern segmentation.  It also provides a blueprint for **source separation** problems where additive mixtures must be decomposed into constituent signals.
 
@@ -45,7 +45,7 @@ Before mixing, pure patterns should be aligned, masked, and normalised.  Typical
 
 ### Synthetic Mixing
 
-Training a supervised model requires paired samples \((C,(A,B))\).  Following the linear mixing approach described in the literature【448272854652800†L912-L919】, we will combine pairs of pure patterns using random weights \(w_A, w_B\) drawn from a uniform distribution.  Two mixing pipelines will be investigated:
+Training a supervised model requires paired samples \((C,(A,B,x,y))\).  Following the linear mixing approach described in the literature【448272854652800†L912-L919】, we will combine pairs of pure patterns using random weights \(x, y\) drawn from a uniform distribution.  Two mixing pipelines will be investigated:
 
 1. **Normalise then mix:** each pure pattern is intensity‑normalised independently; then a weighted sum is computed; finally the result is rescaled to the 16‑bit range.
 2. **Mix then normalise:** a weighted sum of raw intensities is formed first; the mixture is then globally normalised.
@@ -58,7 +58,7 @@ Several deep learning architectures can be adapted for the deconvolution task:
 
 ### U‑Net and Variants
 
-The **U‑Net** architecture features an encoder–decoder structure with skip connections that recover fine details【110698761351920†L97-L128】.  For this project we propose a **dual‑output U‑Net** where a single backbone processes the mixed input and splits into two decoder branches that reconstruct \(A\) and \(B\).  Each branch may share initial layers and diverge near the output to allow specialisation.
+The **U‑Net** architecture features an encoder–decoder structure with skip connections that recover fine details【110698761351920†L97-L128】.  For this project we propose a **dual‑output U‑Net** where a single backbone processes the mixed input and splits into two decoder branches that reconstruct \(A\) and \(B\), alongside a weight head that predicts \hat{x\).  Each branch may share initial layers and diverge near the output to allow specialisation.
 
 ### CycleGAN / GAN Approaches
 
@@ -81,13 +81,13 @@ Modern vision models incorporate attention modules to capture long‑range depen
 
 The baseline dual‑output U‑Net will be trained with a weighted sum of reconstruction losses:
 
-\[\mathcal{L} = \lambda_1 \, \|\hat{A} - A\|_1 + \lambda_2 \, \|\hat{B} - B\|_1 + \lambda_3 \, \|\hat{A}+\hat{B} - C\|_1\; .\]
+\[\mathcal{L} = \lambda_{ab} \, (\|\hat{A} - A\|_1 + \|\hat{B} - B\|_1) + \lambda_{recon} \, \|\hat{C} - C\|_1 + \lambda_x \, \|\hat{x} - x\|\; ,\]
 
-The third term enforces that the network’s outputs sum to the input mixture, reinforcing the physical mixing model.  Additional terms (e.g., perceptual or adversarial losses) can be added as experiments progress.  Hyperparameters \(\lambda_i\) are set via configuration.
+where \(\hat{C} = \hat{x}\hat{A} + (1-\hat{x})\hat{B}\). The reconstruction term enforces the physical mixing model, while the weight supervision term encourages accurate estimates of \(x\). Additional terms (e.g., perceptual or adversarial losses) can be added as experiments progress. Hyperparameters \(\lambda_i\) are set via configuration.
 
 ### Data Handling
 
-Data loaders (`src/datasets/`) will read 16‑bit PNG/TIF images using `opencv` or `Pillow`, convert to float tensors, and apply augmentations on the fly.  Each sample returns a tuple `(C, (A,B))`.  Debug mode will restrict the dataset to a small subset or synthetic dummy images to allow fast iteration.
+Data loaders (`src/datasets/`) will read 16‑bit PNG/TIF images using `opencv` or `Pillow`, convert to float tensors, and apply augmentations on the fly.  Each sample returns a tuple `(C, (A,B,x))`.  Debug mode will restrict the dataset to a small subset or synthetic dummy images to allow fast iteration.
 
 ### Training Pipeline
 

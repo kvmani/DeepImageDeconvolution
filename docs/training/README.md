@@ -1,11 +1,11 @@
 # Training (`scripts/run_train.py`)
 
-This guide explains how to train the current baseline **dual-output U-Net** that predicts `(A, B)` from a mixed input `C`.
+This guide explains how to train the current baseline **dual-output U-Net** that predicts `(A, B, x, y)` from a mixed input `C`.
 
 ## What the training script does
 
-- Loads paired triplets `(C, A, B)` from a synthetic dataset folder (16-bit PNG/TIF).
-- Trains a dual-head U-Net with an L1 reconstruction loss on `A` and `B`, plus a **sum-consistency** term enforcing `A_pred + B_pred ≈ C`.
+- Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG/TIF + metadata CSV).
+- Trains a dual-head U-Net with a combined loss: `L_ab` for `A/B`, `L_recon` for `C_hat = x_hat*A_hat + y_hat*B_hat`, and `L_x` for weight supervision.
 - Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), and the resolved config (`config_used.json`) to an output directory.
 - Periodically writes **visual monitoring** samples (8-bit PNGs) and an HTML index with per-epoch summaries and metric plots for quick inspection of training progress.
 - Uses GPU automatically when available (`cuda`), otherwise CPU.
@@ -76,6 +76,8 @@ Training is config-driven. The main knobs live in `configs/train_default.yaml`.
 - `data.preprocess.mask.enabled`: keep `true` if inputs are circular-detector patterns.
 - `data.preprocess.normalize.enabled`: usually `false` if generation already normalizes; enable if training on unnormalized data.
 - `data.preprocess.augment.enabled`: `true` once the pipeline is stable; start `false` while validating correctness.
+- `data.weights_csv`: optional path to a `metadata.csv` containing `sample_id` and `x` (defaults to `<root_dir>/metadata.csv`).
+- `data.require_weights`: keep `true` for synthetic training so `x` is supervised.
 
 ### `model.*` (U-Net capacity)
 
@@ -88,8 +90,25 @@ Training is config-driven. The main knobs live in `configs/train_default.yaml`.
 - `train.batch_size`: start with `8` (default) and reduce if you hit OOM (common range: `2–16`).
 - `train.learning_rate`: `1e-3` for Adam; try `3e-4` if training is unstable.
 - `train.epochs`: `50` for a baseline; increase for better convergence once data is realistic.
-- `train.loss.lambda_sum`: `0.5` (default) encourages physical consistency (`A+B≈C`); increase if sum consistency matters more than sharpness.
+- `train.loss.lambda_recon`: `0.5` (default) encourages physical consistency (`C_hat≈C`); increase if reconstruction fidelity matters more than sharpness.
+- `train.loss.lambda_x`: `0.1` (default) sets the weight-supervision strength for `x_hat`.
 - `train.grad_clip`: keep `0.0` unless gradients explode (then try `1.0`).
+- `train.resume_from`: optional path to a checkpoint to resume training (restores optimizer + scheduler state).
+
+#### One-cycle learning rate policy
+
+The default configs expose a one-cycle scheduler that steps **per iteration** (not per epoch). Configure it under `train.scheduler`:
+
+```yaml
+train:
+  scheduler:
+    name: one_cycle
+    max_lr: 2e-4
+    pct_start: 0.35
+    div_factor: 20
+    final_div_factor: 1e4
+    anneal_strategy: cos
+```
 
 ### `logging.image_log.*` (visual monitoring)
 
@@ -101,7 +120,7 @@ Training is config-driven. The main knobs live in `configs/train_default.yaml`.
 - `logging.image_log.split`: `val` (default) or `train` source split.
 - `logging.image_log.output_dir`: `null` uses `<out_dir>/monitoring`; otherwise set a subfolder.
 - `logging.image_log.image_format`: `png` (recommended).
-- `logging.image_log.include_sum`: when `true`, logs `C_sum = A_pred + B_pred`.
+- `logging.image_log.include_recon`: when `true`, logs `C_hat = x_hat*A_pred + y_hat*B_pred`.
 
 Example snippet:
 

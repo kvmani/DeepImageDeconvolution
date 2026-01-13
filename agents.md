@@ -1,8 +1,8 @@
 # AGENTS.md – Guidelines for Developers and Automation Agents
 
-This document describes how human developers and automated agents should work within this repository.  Its purpose is to ensure that all contributions align with the mission to deconvolve mixed Kikuchi patterns, respect the **16‑bit nature** of the data, and maintain high standards of code quality, reproducibility and transparency.  Where trade‑offs arise, **clarity and correctness** take precedence over unnecessary cleverness.  If you are unsure about a decision, document the rationale and err on the side of explicitness. Always consult docs/mission_statement.md for any clarificaiton of overall objectives and ensure the individual tasks and code changes are well aligned with the overall objecived defined there.
+This document describes how human developers and automated agents should work within this repository.  Its purpose is to ensure that all contributions align with the mission to deconvolve mixed Kikuchi patterns, respect the **16‑bit nature** of the data, and maintain high standards of code quality, reproducibility and transparency.  Where trade‑offs arise, **clarity and correctness** take precedence over unnecessary cleverness.  If you are unsure about a decision, document the rationale and err on the side of explicitness. Always consult `docs/mission_statement.md` for clarification of overall objectives and ensure the individual tasks and code changes are aligned with the objectives defined there.
 
-If an indivudual folder has another agents.md use that for fine tuning the expected behavior and give preference to its instruction where conflict arises with current document.
+Guideline hierarchy: the root `agents.md` provides default behaviors for the repository. A nested `agents.md` in a subdirectory may override or extend these rules for that area. When conflicts arise, prefer the most specific (deepest) guidance; if ambiguity remains, follow the stricter requirement and note the decision in the change description.
 
 ## 1. General Mandate
 
@@ -91,6 +91,7 @@ kikuchi_deconvolution/
 
 ## 7. Testing and Continuous Integration
 
+* Use pre-commit hooks or CI checks to enforce formatting, linting, and documentation synchronization.
 * Write unit tests for every module in `src/`.  Tests must include 16‑bit edge cases, such as maximum intensity and zero intensity patterns, and ensure that synthetic mixing functions obey the sum rule \(\hat{A} + \hat{B} = C\).
 * Provide integration tests that run `run_train.py --debug` and `run_infer.py --debug` to ensure the entire pipeline works end‑to‑end on a small dataset.
 
@@ -111,13 +112,15 @@ kikuchi_deconvolution/
 
 ## 10. Acceptance Checklist (Self‑Verify)
 
-Before marking a task complete or opening a pull request, verify:
+Before marking a task complete or opening a pull request, walk through the following decision checks:
 
-- [ ] Code runs in debug and regular modes without raising exceptions.
-- [ ] All images remain 16‑bit through the processing pipeline; any conversions are explicit and documented.
-- [ ] No absolute paths or secret values appear in the code.  All parameters are configurable.
-- [ ] `pytest` passes on Windows and Linux (where possible).  If GPU‑specific code is added, provide a CPU fallback.
-- [ ] Logging statements provide sufficient context and do not leak sensitive data.
-- [ ] Documentation is fully synced with behavior changes (usage, algorithmic details, scientific assumptions) and is linked appropriately from `README.md`.
+* If any image fails the 16‑bit check, raise a `ValueError` with guidance on conversion (and add or update a unit test for the failure mode).
+* If preprocessing, mixing, training, or inference logic changes, verify debug and regular modes run without exceptions and update any affected configs.
+* If new outputs or file formats are introduced, update the relevant `.md` usage docs and example commands.
+* If documentation is modified, verify all affected `.md` files are updated and that `README.md` links remain accurate.
+* If logging changes, confirm messages include shapes, bit‑depth, and file context without leaking sensitive data.
+* If tests are impacted, run `pytest` (or document why it could not be run) and ensure CPU fallbacks exist for GPU-specific paths.
+* If configuration defaults change, confirm the change is reflected in `configs/` and corresponding documentation.
+* If any absolute paths or secrets appear, remove them and replace with configurable parameters.
 
 By following this AGENTS.md, we ensure that the project remains maintainable, reproducible and aligned with its scientific objectives.

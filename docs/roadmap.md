@@ -18,6 +18,12 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * `docs/references/literature_survey.md` summarising important papers and key takeaways with citations.
 * A requirements document specifying data bit‑depth, target image resolution, acceptable processing latency and any regulatory constraints.
+* A catalog of at least 15 primary papers and 3 reference implementations with short summaries and links.
+
+**Risks and Dependencies:**
+
+* Access to paywalled literature or proprietary datasets may delay the survey.
+* Availability of representative EBSD datasets and domain expertise for interpretation.
 
 ## Phase 1 – Data Acquisition and Pre‑Processing (Weeks 3–5)
 
@@ -30,7 +36,14 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * `data/raw/` populated with pure pattern images (organised by phase or orientation).
 * `src/preprocessing/normalise.py` and associated unit tests.
+* Implement and unit-test bit-depth verification and normalization routines with explicit error messaging.
+* Benchmark normalization strategies on a sample dataset and report PSNR/SSIM comparisons.
 * A report describing pre‑processing choices and their impact on pattern quality.
+
+**Risks and Dependencies:**
+
+* Limited diversity in raw data can bias preprocessing decisions.
+* Inconsistent or undocumented acquisition settings may complicate normalization choices.
 
 ## Phase 2 – Synthetic Data Generation (Weeks 6–8)
 
@@ -43,7 +56,13 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * `data/synthetic/` containing thousands of mixed and ground truth pattern triplets.
 * `src/generation/mix.py` with extensive unit tests covering corner cases (e.g., extreme weight values, mismatched shapes).
+* A reproducible synthetic dataset of at least 10,000 samples with metadata coverage for all pipelines.
 * Documentation describing mixing strategies and their physical justification.
+
+**Risks and Dependencies:**
+
+* Synthetic mixtures may not adequately capture experimental variability.
+* Compute/storage constraints for large datasets.
 
 ## Phase 3 – Model Architecture Design (Weeks 9–11)
 
@@ -55,7 +74,13 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 **Deliverables:**
 
 * Implementation files such as `src/models/unet_dual.py`, `src/models/gan_dual.py` with clear docstrings and tests.
+* Train at least two candidate architectures on a debug dataset and record parameter counts plus validation PSNR/SSIM.
 * A comparative report summarising the pros and cons of each architecture and justifying the choice of baseline.
+
+**Risks and Dependencies:**
+
+* Model comparisons depend on representative synthetic data and stable training settings.
+* Compute limits may constrain architecture exploration.
 
 ## Phase 4 – Training Pipeline Development (Weeks 12–15)
 
@@ -69,7 +94,13 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * `run_train.py` CLI wrapper that accepts a config file and runs training.
 * Training curves, logs and checkpoints saved under `models/` for the baseline model on the synthetic dataset.
+* At least one full training run completed with `best.pt`, `last.pt`, and `history.json` artifacts.
 * Documentation explaining how to configure and run training on various platforms.
+
+**Risks and Dependencies:**
+
+* Training stability may depend on normalization choices and data diversity.
+* GPU availability and reproducibility settings can affect throughput.
 
 ## Phase 5 – Inference and Post‑Processing (Weeks 16–17)
 
@@ -82,7 +113,13 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * `run_infer.py` CLI wrapper for inference.
 * Sample outputs on held‑out test data with quantitative metrics.
+* Inference run on at least 100 samples producing `A`, `B`, `C_hat`, and `weights.csv` outputs.
 * Scripts for visualising predictions alongside ground truth and the mixed input.
+
+**Risks and Dependencies:**
+
+* Checkpoint compatibility across model revisions.
+* Post-processing assumptions (masking, clamping) may affect downstream metrics.
 
 ## Phase 6 – Evaluation and Metrics (Weeks 18–19)
 
@@ -95,6 +132,12 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * A report summarising quantitative results and qualitative observations.  Highlight failure modes and potential improvements.
 * Unit tests for metric functions.
+* Baseline PSNR/SSIM results on a fixed test split with stored configuration metadata.
+
+**Risks and Dependencies:**
+
+* Metrics can be sensitive to normalization and masking policies.
+* Ground truth quality for experimental data may be limited.
 
 ## Phase 7 – Integration and Packaging (Weeks 20–21)
 
@@ -108,6 +151,12 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 
 * A packaged release candidate with all code, tests and documentation.  A zipped dataset of synthetic patterns may accompany the release if licensing permits.
 * Environment definition files (`environment.yml`, `requirements.txt`) tested on multiple platforms.
+* Dockerfile build verified for CPU inference and documented GPU usage instructions.
+
+**Risks and Dependencies:**
+
+* Container builds may break due to upstream dependency changes.
+* GPU support depends on compatible CUDA drivers and host configuration.
 
 ## Phase 8 – Documentation and Dissemination (Weeks 22–23)
 
@@ -120,9 +169,17 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 **Deliverables:**
 
 * Up‑to‑date documentation in the `docs/` folder.
+* A published tutorial, symbol reference, and manuscript skeleton linked from `README.md`.
 * A slide deck or report ready for dissemination.
 
+**Risks and Dependencies:**
+
+* Documentation can drift if code evolves rapidly without coordinated updates.
+* Time allocation for writing and review.
+
 ## Phase 9 – Maintenance and Future Work (Week 24+)
+
+**Objectives:**
 
 After the initial release, future work may include:
 
@@ -132,6 +189,15 @@ After the initial release, future work may include:
 * Optimising for inference speed and memory footprint for deployment on resource‑constrained systems.
 
 Such tasks should be added to this roadmap as separate phases with their own objectives and deliverables.
+
+**Deliverables:**
+
+* A maintained post‑release backlog with owners, priorities, and review cadence (e.g., quarterly).
+
+**Risks and Dependencies:**
+
+* Sustained maintenance resources and long‑term access to compute/data.
+* Changes in EBSD acquisition hardware or software that shift requirements.
 
 ---
 

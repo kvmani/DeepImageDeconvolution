@@ -157,3 +157,13 @@ When enabled, training also writes an HTML image log under `<out_dir>/monitoring
 ## Documentation
 
 See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phased deliverables. For a concise snapshot of the current implementation, read `docs/status.md` and keep `todo_list.md` updated with the active work list.
+
+## Additional Documentation
+
+- `docs/tutorial.md` for a step-by-step user tutorial
+- `docs/symbols.md` for the math symbol reference
+- `docs/manuscript/introduction.md` for manuscript intro notes
+- `docs/manuscript/methods.md` for manuscript methods notes
+- `docs/manuscript/results.md` for manuscript results notes
+- `docs/manuscript/discussion.md` for manuscript discussion notes
+- `docs/references/refs.bib` for BibTeX placeholders and citations

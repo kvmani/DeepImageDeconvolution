@@ -4,7 +4,7 @@ This guide explains how to train the current baseline **dual-output U-Net** that
 
 ## What the training script does
 
-- Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG/TIF/BMP + metadata CSV).
+- Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG outputs + metadata CSV).
 - Trains a dual-head U-Net with a combined loss: `L_ab` for `A/B`, `L_recon` for `C_hat = x_hat*A_hat + y_hat*B_hat`, and `L_x` for weight supervision.
 - Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), and the resolved config (`config_used.json`) to an output directory.
 - Periodically writes **visual monitoring** samples (8-bit PNGs) and an HTML index with per-epoch summaries and metric plots for quick inspection of training progress.
@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 2. Create a synthetic dataset with `A/`, `B/`, `C/` folders.
 
-The training pipeline expects **paired** 16-bit images (PNG/TIF/BMP) produced by `scripts/generate_data.py` (recommended). If your sources include 8-bit or 32-bit BMP exports, prepare a canonical 16-bit copy first with `scripts/prepare_experimental_data.py`.
+The training pipeline expects **paired** 16-bit PNG outputs produced by `scripts/generate_data.py` (recommended). Input sources may be BMP/PNG/JPG/TIF and can be 8-bit; they are scaled to 16-bit during preparation or on read. Use `scripts/prepare_experimental_data.py` to create a canonical 16-bit dataset when needed.
 
 ## Copy/paste commands
 
@@ -160,5 +160,5 @@ Open `monitoring/index.html` in a browser to review training progress visually.
 ## Common issues
 
 - `No paired samples found...`: `data.root_dir` does not contain matching `A/`, `B/`, `C/` triplets.
-- `Expected 16-bit image...`: inputs are not `uint16` PNG/TIF/BMP; regenerate or run `scripts/prepare_experimental_data.py` before training.
+- `Unsupported image dtype...`: inputs are unreadable or in unsupported formats; regenerate or run `scripts/prepare_experimental_data.py` before training.
 - GPU OOM: reduce `train.batch_size`, `model.base_channels`, or `model.depth`.

@@ -81,9 +81,9 @@ def run_inference(config: Dict[str, Any]) -> None:
     model.eval()
 
     output_format = str(output_cfg.get("format", "png")).lower()
-    if output_format not in ("png", "tif", "tiff"):
-        raise ValueError("output.format must be one of: png, tif, tiff.")
-    suffix = ".tif" if output_format in ("tif", "tiff") else ".png"
+    if output_format != "png":
+        raise ValueError("output.format must be 'png' for canonical 16-bit outputs.")
+    suffix = ".png"
 
     save_recon = bool(output_cfg.get("save_recon", output_cfg.get("save_sum", True)))
     save_weights = bool(output_cfg.get("save_weights", True))

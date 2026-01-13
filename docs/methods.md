@@ -4,15 +4,13 @@ This document provides a manuscript-style description of the data handling, synt
 
 ## Data sources and bit-depth policy
 
-Inputs are grayscale Kikuchi patterns stored as BMP/PNG/TIF. In practice:
+Inputs are grayscale Kikuchi patterns stored as BMP/PNG/JPG/TIF. In practice:
 
 - Most experimental patterns are 16-bit grayscale.
-- Some inputs may be 8-bit (legacy exports) or 32-bit BMPs (typically 8-bit per channel in a 32-bit container).
+- Some inputs may be 8-bit (legacy exports) or 32-bit containers (typically 8-bit per channel).
+- Color inputs (e.g., JPEG) are converted to grayscale using luma weighting before scaling.
 
-Two handling modes are supported:
-
-1. **Canonical 16-bit** (recommended): Convert all inputs to 16-bit grayscale for a single, consistent data type in training and evaluation. This is the default workflow.
-2. **Preserve raw bit depth** (exploratory): Keep 8-bit inputs as 8-bit and 16-bit inputs as 16-bit, with explicit conversion to float during processing.
+All inputs are scaled to a canonical 16-bit grayscale representation for processing, and pipeline outputs are written as 16-bit PNGs. Logging and visualization artifacts remain 8-bit.
 
 The raw files under `data/raw/` are never modified. Use the preparation script to create a canonical training/eval copy under `data/processed/`:
 
@@ -25,6 +23,7 @@ python3 scripts/prepare_experimental_data.py \
 ```
 
 The script writes a manifest with checksums and parameters to support reproducibility.
+Prepared outputs are always 16-bit PNG files to keep downstream pipelines consistent.
 
 ## Preprocessing
 

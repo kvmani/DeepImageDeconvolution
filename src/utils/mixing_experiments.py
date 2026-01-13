@@ -278,7 +278,7 @@ def show_interactive_mixer(cfg: MixingExperimentConfig) -> None:
 
     candidate_dir = cfg.a_path.parent
     candidates = _iter_image_paths(
-        candidate_dir, extensions=(".bmp", ".png", ".tif", ".tiff")
+        candidate_dir, extensions=(".bmp", ".png", ".tif", ".tiff", ".jpg", ".jpeg")
     )
     if cfg.a_path not in candidates:
         candidates = [cfg.a_path, *candidates]

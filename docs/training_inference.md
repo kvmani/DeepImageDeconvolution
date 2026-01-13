@@ -48,7 +48,7 @@ python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint ou
 
 Outputs in `out_dir`:
 
-- `A/` and `B/` predicted 16-bit patterns
+- `A/` and `B/` predicted 16-bit PNG patterns
 - `C_hat/` reconstructed mixture `x_hat * A_hat + y_hat * B_hat` (optional)
 - `weights.csv` with `x_hat` and `y_hat` per sample (optional)
 - `config_used.json` and `output.log` (if enabled)

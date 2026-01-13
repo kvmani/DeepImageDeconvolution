@@ -4,11 +4,11 @@ This guide documents the synthetic data generation workflow for mixed Kikuchi pa
 
 ## Inputs
 
-- Place 16-bit PNG/TIF/BMP pure patterns under `data/raw/`.
+- Place BMP/PNG/JPG/TIF pure patterns under `data/raw/`.
 - For local testing, sample files exist in `data/code_development_data/`.
 - For real experimental examples (BCC/FCC), see `data/raw/Double Pattern Data/` and the pure references under `Good Pattern/`. Mixed patterns in that folder are useful for qualitative evaluation or benchmarking.
 
-Inputs may be 8-bit or 32-bit container formats in some cases. For reproducible training, prepare a canonical 16-bit grayscale copy under `data/processed/` with:
+Inputs may be 8-bit or 32-bit container formats in some cases. For reproducible training, prepare a canonical 16-bit PNG grayscale copy under `data/processed/` with:
 
 ```bash
 python3 scripts/prepare_experimental_data.py \
@@ -18,7 +18,7 @@ python3 scripts/prepare_experimental_data.py \
   --output-bit-depth 16
 ```
 
-The generator expects 16-bit inputs and will raise if non-16-bit data are provided.
+The generator scales non-16-bit inputs to a canonical 16-bit range and always writes 16-bit PNG outputs.
 The preparation script writes a JSON manifest with checksums and conversion parameters to `<output-dir>/manifest.json`.
 
 ## Outputs
@@ -40,14 +40,14 @@ The generator is driven by YAML configs in `configs/`.
 
 Key options:
 
-- `data.input_dir`: directory with 16-bit pure patterns
+- `data.input_dir`: directory with pure patterns (BMP/PNG/JPG/TIF)
 - `data.output_dir`: destination for synthetic outputs
 - `data.num_samples`: number of synthetic samples to generate
 - `data.preprocess.*`: crop, denoise, circular masking, normalization, and augmentation settings
 - `data.preprocess.mask.*`: circular mask detection and enforcement settings
 - `data.preprocess.normalize.smart`: smart normalization inside the circular mask (default: true)
 - `data.mix.*`: mixing pipeline, weights, optional blur/noise, and mix-time normalization settings
-- `data.output.format`: output image format (`png` or `tif`)
+- `data.output.format`: output image format (`png` only)
 - `debug.*`: deterministic seeds, sample limits, and visualization
 
 ## Mixing pipelines

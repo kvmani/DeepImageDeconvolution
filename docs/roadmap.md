@@ -30,13 +30,13 @@ For the current implementation snapshot and near-term tasks, see `docs/status.md
 **Objectives:**
 
 * Collect a diverse set of high quality pure Kikuchi patterns.  This may involve experimental EBSD measurements or synthetically generated patterns using diffraction simulation software.
-* Implement pre‑processing routines in `src/preprocessing/` to verify 16‑bit input, crop regions of interest, apply circular masks, normalise intensities (including smart normalization inside the mask), and optionally denoise.  Scripts should be configurable and run in debug mode on a sample dataset.
+* Implement pre‑processing routines in `src/preprocessing/` to convert inputs to canonical 16‑bit, crop regions of interest, apply circular masks, normalise intensities (including smart normalization inside the mask), and optionally denoise.  Scripts should be configurable and run in debug mode on a sample dataset.
 
 **Deliverables:**
 
 * `data/raw/` populated with pure pattern images (organised by phase or orientation).
 * `src/preprocessing/normalise.py` and associated unit tests.
-* Implement and unit-test bit-depth verification and normalization routines with explicit error messaging.
+* Implement and unit-test bit-depth conversion and normalization routines with explicit error messaging.
 * Benchmark normalization strategies on a sample dataset and report PSNR/SSIM comparisons.
 * A report describing pre‑processing choices and their impact on pattern quality.
 

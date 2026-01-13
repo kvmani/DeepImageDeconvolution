@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 
-SUPPORTED_EXTENSIONS = (".bmp", ".png", ".tif", ".tiff")
+SUPPORTED_EXTENSIONS = (".bmp", ".png", ".tif", ".tiff", ".jpg", ".jpeg")
 
 
 def _sha256(path: Path) -> str:
@@ -110,15 +110,15 @@ def parse_args() -> argparse.Namespace:
         "--output-format",
         type=str,
         default="png",
-        choices=("png", "tif", "tiff"),
-        help="Output image format for prepared data.",
+        choices=("png",),
+        help="Output image format for prepared data (16-bit PNG only).",
     )
     parser.add_argument(
         "--output-bit-depth",
         type=str,
         default="16",
-        choices=("16", "keep"),
-        help="Output bit depth (scale to 16-bit or keep raw bit depth).",
+        choices=("16",),
+        help="Output bit depth (always scales to 16-bit).",
     )
     parser.add_argument(
         "--grayscale-method",
@@ -145,7 +145,7 @@ def main() -> None:
     args = parse_args()
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
-    output_format = ".tif" if args.output_format in ("tif", "tiff") else ".png"
+    output_format = ".png"
     manifest_path = Path(args.manifest_path) if args.manifest_path else output_dir / "manifest.json"
 
     images = _iter_images(input_dir)

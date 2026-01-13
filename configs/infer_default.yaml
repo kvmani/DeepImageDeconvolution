@@ -1,7 +1,7 @@
 # Default inference configuration for dual-output U-Net.
 data:
   mixed_dir: data/synthetic/C
-  extensions: [".png", ".tif", ".tiff"]
+  extensions: [".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg"]
   num_workers: 2
   preprocess:
     mask:

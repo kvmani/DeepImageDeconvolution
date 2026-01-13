@@ -1,4 +1,4 @@
-"""Image IO utilities with 16-bit safeguards."""
+"""Image IO utilities with 16-bit normalization and format support."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +7,7 @@ from typing import Dict, List
 import numpy as np
 from PIL import Image
 
-IMAGE_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp")
+IMAGE_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg")
 
 
 def collect_image_paths(directory: Path) -> List[Path]:
@@ -29,30 +29,41 @@ def collect_image_paths(directory: Path) -> List[Path]:
     return sorted(paths)
 
 
-def ensure_16bit(image: np.ndarray, path: Path) -> None:
-    """Validate that an image is 16-bit.
+def _to_grayscale(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return image
+    if image.ndim == 3:
+        if image.shape[2] == 1:
+            return image[..., 0]
+        weights = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+        gray = image[..., :3].astype(np.float32) @ weights
+        if np.issubdtype(image.dtype, np.integer):
+            max_val = np.iinfo(image.dtype).max
+            return np.clip(np.round(gray), 0, max_val).astype(image.dtype)
+        return gray.astype(np.float32)
+    raise ValueError(f"Expected 2D/3D image array, got shape={image.shape}.")
 
-    Parameters
-    ----------
-    image:
-        Image array.
-    path:
-        Image path for error context.
 
-    Raises
-    ------
-    ValueError
-        If the image is not 16-bit.
-    """
-    if image.dtype != np.uint16:
-        raise ValueError(
-            f"Expected 16-bit image at {path}, got dtype={image.dtype}. "
-            "Ensure the source data is 16-bit."
-        )
+def _to_uint16(image: np.ndarray) -> np.ndarray:
+    image = _to_grayscale(image)
+    if image.dtype == np.uint16:
+        return image
+    if np.issubdtype(image.dtype, np.integer):
+        max_val = np.iinfo(image.dtype).max
+        scale = 65535.0 / float(max_val)
+        return np.clip(image.astype(np.float32) * scale, 0, 65535).round().astype(np.uint16)
+    if np.issubdtype(image.dtype, np.floating):
+        max_val = float(image.max()) if image.size else 0.0
+        if max_val <= 1.0:
+            scale = 65535.0
+        else:
+            scale = 65535.0 / max_val if max_val > 0 else 0.0
+        return np.clip(image.astype(np.float32) * scale, 0, 65535).round().astype(np.uint16)
+    raise ValueError(f"Unsupported image dtype: {image.dtype}.")
 
 
 def read_image_16bit(path: Path) -> np.ndarray:
-    """Read a 16-bit grayscale image.
+    """Read a grayscale image and return a 16-bit array.
 
     Parameters
     ----------
@@ -62,14 +73,11 @@ def read_image_16bit(path: Path) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        2D uint16 array.
+        2D uint16 array scaled to full 16-bit range if needed.
     """
     with Image.open(path) as img:
         image = np.array(img)
-    if image.ndim != 2:
-        raise ValueError(f"Expected grayscale image at {path}, got shape {image.shape}.")
-    ensure_16bit(image, path)
-    return image
+    return _to_uint16(image)
 
 
 def write_image_16bit(path: Path, image: np.ndarray) -> None:
@@ -122,14 +130,6 @@ def to_float01(image: np.ndarray) -> np.ndarray:
     return image.astype(np.float32) / 65535.0
 
 
-def _ensure_grayscale(image: np.ndarray) -> np.ndarray:
-    if image.ndim == 2:
-        return image
-    if image.ndim == 3:
-        return image[..., 0]
-    raise ValueError(f"Expected 2D/3D image array, got shape={image.shape}.")
-
-
 def _to_float01_non16(image: np.ndarray) -> np.ndarray:
     if image.dtype == np.uint8:
         return image.astype(np.float32) / 255.0
@@ -154,7 +154,7 @@ def to_float01_any(image: np.ndarray, allow_non_16bit: bool = False) -> np.ndarr
     allow_non_16bit:
         When False, only uint16 inputs are accepted.
     """
-    image = _ensure_grayscale(image)
+    image = _to_grayscale(image)
     if image.dtype == np.uint16:
         return to_float01(image)
     if not allow_non_16bit:

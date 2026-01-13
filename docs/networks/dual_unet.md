@@ -12,10 +12,10 @@ The baseline network is a shared-encoder U-Net that branches into **two decoders
 
 ## End-to-end training example (430 × 430 PNGs)
 
-This example uses a single training triplet consisting of one mixed pattern `C` and its two constituents `A` and `B`. Each image is a **single-channel, 16-bit PNG/TIF/BMP** with size **430 × 430** pixels. The steps below describe what happens to these images during training in the current pipeline.
+This example uses a single training triplet consisting of one mixed pattern `C` and its two constituents `A` and `B`. Each image is a **single-channel, 16-bit PNG** with size **430 × 430** pixels. The steps below describe what happens to these images during training in the current pipeline.
 
 1. **Load 16-bit images and normalize to float**  
-   The dataset loader reads each 16-bit PNG/TIF/BMP and converts it to floating point in the range `[0, 1]`. At this point, `C`, `A`, and `B` are NumPy arrays of shape `(430, 430)` with `float32` values.
+   The dataset loader reads each 16-bit PNG (inputs may originate as BMP/PNG/JPG/TIF but are converted to canonical PNGs) and converts it to floating point in the range `[0, 1]`. At this point, `C`, `A`, and `B` are NumPy arrays of shape `(430, 430)` with `float32` values.
 
 2. **Load ground-truth mixing weights**  
    The synthetic generator writes a `metadata.csv` with `sample_id` and weight `x`. The dataset loader reads `x` for each sample and computes `y = 1 - x`. Both are validated to stay in `[0, 1]` and to satisfy `x + y ≈ 1`.

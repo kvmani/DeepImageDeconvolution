@@ -1,7 +1,7 @@
 # Debug inference configuration for quick checks.
 data:
   mixed_dir: data/synthetic/debug_run/C
-  extensions: [".png", ".tif", ".tiff"]
+  extensions: [".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg"]
   num_workers: 0
   preprocess:
     mask:

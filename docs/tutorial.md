@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 ## 1. Prepare raw EBSD data
 
-Keep raw inputs unchanged and create a canonical 16-bit grayscale copy for processing.
+Keep raw inputs unchanged (BMP/PNG/JPG/TIF supported) and create a canonical 16-bit grayscale PNG copy for processing.
 
 ```bash
 python3 scripts/prepare_experimental_data.py \

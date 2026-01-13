@@ -39,7 +39,7 @@ Example experimental patterns from the dual-phase steel dataset in `data/raw/Dou
   </tr>
 </table>
 
-> **Note:** Experimental samples in `data/raw/Double Pattern Data/` include BMPs and may be 8-bit or 32-bit container formats. Keep raw files unchanged and use the preparation script to create a canonical 16-bit grayscale copy under `data/processed/` when needed. See `docs/methods.md` for the bit-depth policy.
+> **Note:** Experimental samples in `data/raw/Double Pattern Data/` include BMP/JPG files and may be 8-bit or 32-bit container formats. Keep raw files unchanged and use the preparation script to create a canonical 16-bit grayscale PNG copy under `data/processed/` for consistent training. The pipeline scales non-16-bit inputs to 16-bit; logging and visualization outputs remain 8-bit. See `docs/methods.md` for the bit-depth policy.
 
 ## Quickstart (synthetic data generation)
 
@@ -59,7 +59,7 @@ python3 scripts/generate_data.py --config configs/debug.yaml --debug --visualize
 
 Outputs are written to `data/synthetic/debug_run/` with a `metadata.csv` and debug panels under `data/synthetic/debug_run/debug/`.
 
-If you want to use experimental BMP inputs directly, prepare a canonical 16-bit copy first:
+If you want to use experimental BMP/JPG inputs directly, prepare a canonical 16-bit PNG copy first:
 
 ```bash
 python3 scripts/prepare_experimental_data.py \
@@ -107,7 +107,7 @@ Quick links:
 
 ## Data generation overview
 
-The generator reads 16-bit PNG/TIF/BMP patterns, validates bit depth, optionally preprocesses (crop, denoise, circular mask, normalize, augment), and mixes pairs into synthetic patterns. If inputs are not 16-bit, prepare them first (see `scripts/prepare_experimental_data.py`). Two pipelines are supported:
+The generator reads BMP/PNG/JPG/TIF patterns, scales non-16-bit inputs to a canonical 16-bit range, optionally preprocesses (crop, denoise, circular mask, normalize, augment), and mixes pairs into synthetic patterns. For reproducible datasets, run `scripts/prepare_experimental_data.py` to create canonical 16-bit PNG inputs. Two pipelines are supported:
 
 - `normalize_then_mix`: normalize A and B, then mix using weights.
 - `mix_then_normalize`: mix raw intensities, then normalize the mixture.

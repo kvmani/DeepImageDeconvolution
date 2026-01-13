@@ -22,7 +22,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - Monitoring artifacts are written under `<out_dir>/monitoring` during training.
 - Real experimental patterns are included for reference in `data/raw/Double Pattern Data/`.
 - Advanced architectures (GANs/attention), orientation-based metrics, and production packaging are not implemented yet.
-- A preparation script can create canonical 16-bit copies of experimental BMPs under `data/processed/`.
+- A preparation script can create canonical 16-bit PNG copies of experimental BMP/JPG inputs under `data/processed/`.
 
 ## Codebase Map (Where to Look)
 

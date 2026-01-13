@@ -4,7 +4,7 @@ data:
   a_dir: A
   b_dir: B
   c_dir: C
-  extensions: [".png", ".tif", ".tiff"]
+  extensions: [".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg"]
   val_split: 0.2
   shuffle: true
   num_workers: 0

@@ -41,3 +41,16 @@ def test_read_image_float01_with_meta_non16bit(tmp_path: Path) -> None:
     assert image.dtype == np.float32
     assert 0.0 <= float(image.min()) <= float(image.max()) <= 1.0
     assert meta["is_16bit"] is False
+
+
+def test_read_image_16bit_scales_uint8(tmp_path: Path) -> None:
+    from PIL import Image
+
+    array = np.array([[0, 128, 255]], dtype=np.uint8)
+    path = tmp_path / "test.png"
+    Image.fromarray(array, mode="L").save(path)
+
+    image = read_image_16bit(path)
+    assert image.dtype == np.uint16
+    assert image[0, 0] == 0
+    assert image[0, 2] == 65535

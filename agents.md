@@ -6,7 +6,7 @@ Guideline hierarchy: the root `agents.md` provides default behaviors for the rep
 
 ## 1. General Mandate
 
-* **16‑bit Discipline**: All image handling routines **must operate on 16‑bit data**.  Never implicitly cast to 8‑bit unless explicitly for visualisation.  Input validation should assert bit‑depth and raise descriptive errors if expectations are violated.
+* **16‑bit Discipline**: All core pipeline images **must be normalized to 16‑bit**. Inputs may be BMP/PNG/JPG (8‑bit or 16‑bit) but must be scaled to 16‑bit for processing. Only logging/visualisation outputs may be 8‑bit.
 * **Circular Masking**: Assume the central circular detector region is the meaningful signal.  Detect if inputs are already masked and, if not, apply the maximum inscribed circular mask (centered in the image) so outside pixels are zero.
 * **Modular Design**: Structure the codebase into independent, testable modules.  Data loading, preprocessing, synthetic mixing, model definitions, training loops, and evaluation live in separate packages under `src/`.
 * **Debug vs Regular Modes**: Every runnable script (data generation, training, inference) must support a `--debug` flag.  In debug mode the script should:
@@ -32,7 +32,7 @@ kikuchi_deconvolution/
 │  ├─ roadmap.md
 │  └─ references/
 ├─ data/
-│  ├─ raw/                 # Pure pattern images (16‑bit)
+│  ├─ raw/                 # Pure pattern images (BMP/PNG/JPG/TIF)
 │  ├─ processed/           # Aligned and normalised images
 │  └─ synthetic/           # Mixed patterns and ground truth pairs
 ├─ src/
@@ -56,7 +56,7 @@ kikuchi_deconvolution/
 
 * Each package under `src/` should be importable without side effects.  Models should not load data, and data loaders should not instantiate models.
 * `scripts/` contains thin wrappers that parse command‑line arguments, load configuration, instantiate modules from `src/`, and orchestrate the workflow.  They should remain minimal and free of algorithmic complexity.
-* Tests under `tests/` follow the same structure as `src/`.  Use fixtures to create temporary 16‑bit images for testing.  Debug mode tests can reuse the `--debug` logic.
+* Tests under `tests/` follow the same structure as `src/`.  Use fixtures to create temporary 16‑bit images for testing and include at least one 8‑bit input conversion case.  Debug mode tests can reuse the `--debug` logic.
 
 ## 3. Coding Conventions
 
@@ -69,12 +69,13 @@ kikuchi_deconvolution/
 
 ## 4. Data Handling Guidelines
 
-1. **Bit‑Depth Verification**: When loading an image, check `dtype` and `max()` values to confirm 16‑bit data.  If an 8‑bit image is detected, raise `ValueError` and include guidance on converting to 16‑bit.
+1. **Bit‑Depth Conversion**: When loading an image, detect bit depth and scale to 16‑bit when needed (8‑bit inputs are scaled to full 16‑bit range). Supported formats include BMP/PNG/JPG/TIF. Raise `ValueError` only for unsupported formats or unreadable files, and log conversion metadata.
 2. **Circular Masking**: Apply the maximum inscribed circular mask after any cropping/augmentation.  Detect already-masked inputs (outside region ≈ 0) and record this in metadata/logs.
 3. **Normalisation**: Convert pixel intensities to `float32` in the range \([0,1]\) using `astype(np.float32) / 65535.0`.  For masked images, compute normalization statistics **inside the circular mask** (smart normalization) so outside zeros do not skew the scale.  This smart normalization is project-specific and should remain configurable (default on).  Save any rescaling parameters for inverse transforms if necessary.
-4. **Augmentations**: Provide augmentation utilities (flip, rotate, random crop) that preserve bit‑depth.  Augmentations should be parameterised and configurable in YAML.
-5. **Synthetic Mixing**: Functions in `src/generation/` must implement the pipelines described in the mission statement (normalise‑then‑mix and mix‑then‑normalise).  They should accept two `numpy.ndarray` inputs, weights, and return a tuple `(C, (A, B))`.  Reapply the circular mask after any blur/noise so outside pixels remain zero.  For debug, allow deterministic weights and small images.
-6. **Real Experimental Data**: When example, validation, or benchmark data is needed, use the dataset in `data/raw/Double Pattern Data/` and reference its README. Scripts, notebooks, and tests should use this data where appropriate, without modifying the raw files.
+4. **Output Format**: Persist pipeline outputs (prepared data, synthetic datasets, inference outputs) as 16‑bit PNGs. Use 8‑bit images only for logging/visualisation artifacts.
+5. **Augmentations**: Provide augmentation utilities (flip, rotate, random crop) that preserve bit‑depth.  Augmentations should be parameterised and configurable in YAML.
+6. **Synthetic Mixing**: Functions in `src/generation/` must implement the pipelines described in the mission statement (normalise‑then‑mix and mix‑then‑normalise).  They should accept two `numpy.ndarray` inputs, weights, and return a tuple `(C, (A, B))`.  Reapply the circular mask after any blur/noise so outside pixels remain zero.  For debug, allow deterministic weights and small images.
+7. **Real Experimental Data**: When example, validation, or benchmark data is needed, use the dataset in `data/raw/Double Pattern Data/` and reference its README. Scripts, notebooks, and tests should use this data where appropriate, without modifying the raw files.
 
 ## 5. Model Development Guidelines
 
@@ -86,7 +87,7 @@ kikuchi_deconvolution/
 ## 6. Training and Inference Scripts
 
 * `run_train.py` must parse arguments for config file location, debug flag, output directory, and random seed.  It initialises the dataset, model, optimiser, and learning rate scheduler, then runs training loops with periodic validation.
-* `run_infer.py` should load a saved checkpoint and apply the model to new mixed patterns.  It must handle both single images and batches of images, saving deconvoluted outputs in 16‑bit format.
+* `run_infer.py` should load a saved checkpoint and apply the model to new mixed patterns.  It must handle both single images and batches of images, saving deconvoluted outputs as 16‑bit PNGs.
 * Both scripts must log configuration and environment (OS, Python version, CUDA availability).  When exceptions occur, log the stack trace and exit gracefully.
 
 ## 7. Testing and Continuous Integration
@@ -114,7 +115,7 @@ kikuchi_deconvolution/
 
 Before marking a task complete or opening a pull request, walk through the following decision checks:
 
-* If any image fails the 16‑bit check, raise a `ValueError` with guidance on conversion (and add or update a unit test for the failure mode).
+* If an input image is non‑16‑bit, scale it to 16‑bit and record the conversion; raise `ValueError` only for unsupported formats.
 * If preprocessing, mixing, training, or inference logic changes, verify debug and regular modes run without exceptions and update any affected configs.
 * If new outputs or file formats are introduced, update the relevant `.md` usage docs and example commands.
 * If documentation is modified, verify all affected `.md` files are updated and that `README.md` links remain accurate.

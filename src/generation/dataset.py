@@ -268,9 +268,9 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
     metadata_path = output_dir / "metadata.csv"
     output_cfg = data_cfg.get("output", {})
     output_format = str(output_cfg.get("format", "png")).lower()
-    if output_format not in ("png", "tif", "tiff"):
-        raise ValueError("output.format must be one of: png, tif, tiff.")
-    suffix = ".tif" if output_format in ("tif", "tiff") else ".png"
+    if output_format != "png":
+        raise ValueError("output.format must be 'png' for canonical 16-bit outputs.")
+    suffix = ".png"
 
     metadata_fields = [
         "sample_id",

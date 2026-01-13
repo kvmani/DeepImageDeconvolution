@@ -84,7 +84,7 @@ High quality pure Kikuchi patterns are the foundation for training.  These may c
 * Experimental EBSD data collected on well‑characterised single crystals or polycrystals where patterns can be isolated.
 * Simulated patterns generated via dynamical diffraction calculations.  Synthetic patterns help augment limited experimental data and allow systematic variations of orientation and detector geometry.
 
-Raw inputs may arrive as 16-bit grayscale, but 8-bit or 32-bit container formats can also occur (especially BMP exports). The repository keeps raw files unchanged and provides a non-destructive preparation step (`scripts/prepare_experimental_data.py`) to create a canonical 16-bit grayscale copy for training and evaluation. The first step in every data pipeline is to verify bit-depth and convert to a canonical floating-point representation within \([0,1]\).
+Raw inputs may arrive as 16-bit grayscale, but 8-bit or 32-bit container formats can also occur (especially BMP/JPG exports). The repository keeps raw files unchanged and provides a non-destructive preparation step (`scripts/prepare_experimental_data.py`) to create a canonical 16-bit PNG grayscale copy for training and evaluation. The first step in every data pipeline is to scale inputs to 16-bit (when needed) and convert to a canonical floating-point representation within \([0,1]\); logging and visualization outputs remain 8-bit.
 
 ### Pre‑processing
 
@@ -148,7 +148,7 @@ where \(\hat{C} = \hat{x}\hat{A} + (1-\hat{x})\hat{B}\). The reconstruction term
 
 ### Data Handling
 
-Data loaders (`src/datasets/`) read 16‑bit PNG/TIF/BMP images using `Pillow`, convert to float tensors, and apply augmentations on the fly.  Each sample returns a tuple `(C, (A,B,x))`.  Debug mode will restrict the dataset to a small subset or synthetic dummy images to allow fast iteration.
+Data loaders (`src/datasets/`) read BMP/PNG/JPG/TIF images using `Pillow`, scale non‑16‑bit inputs to a canonical 16‑bit range, convert to float tensors, and apply augmentations on the fly.  Each sample returns a tuple `(C, (A,B,x))`.  Debug mode will restrict the dataset to a small subset or synthetic dummy images to allow fast iteration.
 
 ### Training Pipeline
 

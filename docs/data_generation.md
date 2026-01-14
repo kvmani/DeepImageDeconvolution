@@ -7,6 +7,7 @@ This guide documents the synthetic data generation workflow for mixed Kikuchi pa
 - Place BMP/PNG/JPG/TIF pure patterns under `data/raw/`.
 - For local testing, sample files exist in `data/code_development_data/`.
 - For real experimental examples (BCC/FCC), see `data/raw/Double Pattern Data/` and the pure references under `Good Pattern/`. Mixed patterns in that folder are useful for qualitative evaluation or benchmarking.
+If your inputs are stored in nested subfolders, set `data.input_recursive: true` (or pass `--recursive-input`) so all images are discovered.
 
 Inputs may be 8-bit or 32-bit container formats in some cases. For reproducible training, prepare a canonical 16-bit PNG grayscale copy under `data/processed/` with:
 
@@ -42,6 +43,7 @@ The generator is driven by YAML configs in `configs/`.
 Key options:
 
 - `data.input_dir`: directory with pure patterns (BMP/PNG/JPG/TIF)
+- `data.input_recursive`: when `true`, scan `input_dir` recursively for images
 - `data.output_dir`: destination for synthetic outputs
 - `data.num_samples`: number of synthetic samples to generate
 - `data.preprocess.*`: crop, denoise, circular masking, normalization, and augmentation settings
@@ -57,6 +59,10 @@ CLI logging options (available on all scripts):
 - `--log-file <path>`
 - `--quiet`
 - `--debug` (enables debug mode and verbose logging)
+
+Input discovery override:
+
+- `--recursive-input` / `--no-recursive-input` to enable or disable recursive input scanning on the CLI.
 
 ## Mixing pipelines
 

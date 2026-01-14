@@ -23,6 +23,7 @@ pip install -r requirements.txt
 2. Create a synthetic dataset with `A/`, `B/`, `C/` folders.
 
 The training pipeline expects **paired** 16-bit PNG outputs produced by `scripts/generate_data.py` (recommended). Input sources may be BMP/PNG/JPG/TIF and can be 8-bit; they are scaled to 16-bit during preparation or on read. Use `scripts/prepare_experimental_data.py` to create a canonical 16-bit dataset when needed.
+If your input directory is nested, set `data.input_recursive: true` or pass `--recursive-input` when generating data.
 
 ## Copy/paste commands
 
@@ -43,6 +44,7 @@ Generate a larger synthetic dataset (example uses the small sample images as inp
 python3 scripts/generate_data.py \
   --config configs/default.yaml \
   --input-dir data/code_development_data \
+  --recursive-input \
   --output-dir data/synthetic \
   --num-samples 2000 \
   --seed 42

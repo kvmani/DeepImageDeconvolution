@@ -41,6 +41,7 @@ Use the synthetic generator to create paired A/B/C samples.
 python3 scripts/generate_data.py \
   --config configs/default.yaml \
   --input-dir "data/processed/Double Pattern Data" \
+  --recursive-input \
   --output-dir "data/synthetic/tutorial_run" \
   --num-samples 500 \
   --visualize

@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("PIL")
 
-from src.utils.io import read_image_16bit, read_image_float01_with_meta
+from src.utils.io import collect_image_paths, read_image_16bit, read_image_float01_with_meta
 
 
 def test_read_image_16bit() -> None:
@@ -54,3 +54,22 @@ def test_read_image_16bit_scales_uint8(tmp_path: Path) -> None:
     assert image.dtype == np.uint16
     assert image[0, 0] == 0
     assert image[0, 2] == 65535
+
+
+def test_collect_image_paths_recursive(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+
+    top_image = root / "top.png"
+    nested_image = nested / "nested.jpg"
+    ignored = nested / "ignored.txt"
+    top_image.write_text("x")
+    nested_image.write_text("x")
+    ignored.write_text("x")
+
+    non_recursive = collect_image_paths(root, recursive=False)
+    assert non_recursive == [top_image]
+
+    recursive = collect_image_paths(root, recursive=True)
+    assert recursive == sorted([top_image, nested_image])

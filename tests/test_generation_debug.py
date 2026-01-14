@@ -15,6 +15,7 @@ def test_generate_synthetic_dataset_debug(tmp_path: Path) -> None:
     config = {
         "data": {
             "input_dir": str(input_dir),
+            "input_recursive": True,
             "output_dir": str(tmp_path),
             "num_samples": 2,
             "allow_same": True,

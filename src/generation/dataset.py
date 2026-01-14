@@ -242,8 +242,14 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
 
     rng = np.random.default_rng(debug.seed)
 
-    paths = collect_image_paths(input_dir)
-    logger.info("Found %d input images in %s", len(paths), input_dir)
+    input_recursive = bool(data_cfg.get("input_recursive", False))
+    paths = collect_image_paths(input_dir, recursive=input_recursive)
+    logger.info(
+        "Found %d input images in %s (recursive=%s)",
+        len(paths),
+        input_dir,
+        input_recursive,
+    )
     if len(paths) < 2 and not allow_same:
         raise ValueError("Need at least two input images when allow_same is False.")
 
@@ -267,11 +273,12 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.info("Initializing synthetic dataset generation.")
     logger.info(
-        "Config: input_dir=%s | output_dir=%s | num_samples=%d | pipeline=%s",
+        "Config: input_dir=%s | output_dir=%s | num_samples=%d | pipeline=%s | recursive=%s",
         input_dir,
         output_dir,
         num_samples,
         mix_cfg.get("pipeline", "normalize_then_mix"),
+        input_recursive,
     )
 
     metadata_path = output_dir / "metadata.csv"
@@ -309,6 +316,7 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
         "samples": 0,
         "output_dir": str(output_dir),
         "input_images": len(paths),
+        "input_recursive": input_recursive,
     }
 
     config_path = output_dir / "config_used.json"

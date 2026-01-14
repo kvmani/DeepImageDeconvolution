@@ -1,6 +1,7 @@
 # Default configuration for synthetic data generation.
 data:
   input_dir: data/raw
+  input_recursive: false
   output_dir: data/synthetic
   num_samples: 1000
   allow_same: false

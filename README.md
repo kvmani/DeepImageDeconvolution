@@ -58,6 +58,7 @@ python3 scripts/generate_data.py --config configs/debug.yaml --debug --visualize
 ```
 
 Outputs are written to `data/synthetic/debug_run/` with a `metadata.csv` and debug panels under `data/synthetic/debug_run/debug/`.
+If your input directory contains nested subfolders, add `--recursive-input` (or set `data.input_recursive: true` in the YAML config).
 
 If you want to use experimental BMP/JPG inputs directly, prepare a canonical 16-bit PNG copy first:
 

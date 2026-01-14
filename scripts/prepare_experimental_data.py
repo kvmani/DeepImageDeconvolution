@@ -96,8 +96,9 @@ def _write_image(path: Path, array: np.ndarray) -> None:
     raise ValueError(f"Unsupported output dtype: {array.dtype}")
 
 
-def _iter_images(root: Path) -> List[Path]:
-    return sorted([p for p in root.rglob("*") if p.suffix.lower() in SUPPORTED_EXTENSIONS])
+def _iter_images(root: Path, recursive: bool) -> List[Path]:
+    iterator = root.rglob("*") if recursive else root.iterdir()
+    return sorted([p for p in iterator if p.suffix.lower() in SUPPORTED_EXTENSIONS])
 
 
 def parse_args() -> argparse.Namespace:
@@ -129,6 +130,12 @@ def parse_args() -> argparse.Namespace:
         default="16",
         choices=("16",),
         help="Output bit depth (always scales to 16-bit).",
+    )
+    parser.add_argument(
+        "--recursive-input",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Recursively scan input-dir for images (default: true).",
     )
     parser.add_argument(
         "--grayscale-method",
@@ -224,7 +231,8 @@ def main() -> None:
             logger.error("Input directory does not exist: %s", input_dir)
             raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
-        images = _iter_images(input_dir)
+        input_recursive = bool(args.recursive_input)
+        images = _iter_images(input_dir, recursive=input_recursive)
         sample_limit = args.sample_limit
         if args.debug and sample_limit is None:
             sample_limit = 20
@@ -249,10 +257,11 @@ def main() -> None:
             input_summary.get("sample_modes"),
         )
         logger.info(
-            "Config: output_bit_depth=%s | grayscale=%s | overwrite=%s",
+            "Config: output_bit_depth=%s | grayscale=%s | overwrite=%s | recursive=%s",
             args.output_bit_depth,
             args.grayscale_method,
             args.overwrite,
+            input_recursive,
         )
 
         progress_every = max(1, len(images) // 10)
@@ -302,7 +311,7 @@ def main() -> None:
         raise
     finally:
         duration = time.perf_counter() - start_time
-        output_images = _iter_images(output_dir) if output_dir.exists() else []
+        output_images = _iter_images(output_dir, recursive=True) if output_dir.exists() else []
         output_summary = summarize_images(output_images) if output_images else {}
         manifest.update(
             {

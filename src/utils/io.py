@@ -10,13 +10,15 @@ from PIL import Image
 IMAGE_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg")
 
 
-def collect_image_paths(directory: Path) -> List[Path]:
+def collect_image_paths(directory: Path, recursive: bool = False) -> List[Path]:
     """Collect image paths from a directory.
 
     Parameters
     ----------
     directory:
         Directory to scan for images.
+    recursive:
+        When True, scan subdirectories recursively.
 
     Returns
     -------
@@ -25,7 +27,11 @@ def collect_image_paths(directory: Path) -> List[Path]:
     """
     if not directory.exists():
         raise FileNotFoundError(f"Input directory not found: {directory}")
-    paths = [p for p in directory.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS]
+    if recursive:
+        iterator = directory.rglob("*")
+    else:
+        iterator = directory.iterdir()
+    paths = [p for p in iterator if p.suffix.lower() in IMAGE_EXTENSIONS]
     return sorted(paths)
 
 

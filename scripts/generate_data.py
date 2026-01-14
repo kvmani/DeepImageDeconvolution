@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", type=str, default=None, help="Path to a YAML config.")
     parser.add_argument("--input-dir", type=str, default=None, help="Override input directory.")
+    parser.add_argument(
+        "--recursive-input",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Recursively scan input-dir for images (overrides data.input_recursive).",
+    )
     parser.add_argument("--output-dir", type=str, default=None, help="Override output directory.")
     parser.add_argument("--num-samples", type=int, default=None, help="Number of samples.")
     parser.add_argument("--pipeline", type=str, default=None, help="Mixing pipeline name.")
@@ -96,6 +102,8 @@ def build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
 
     if args.input_dir:
         data_overrides["input_dir"] = args.input_dir
+    if args.recursive_input is not None:
+        data_overrides["input_recursive"] = bool(args.recursive_input)
     if args.output_dir:
         data_overrides["output_dir"] = args.output_dir
     if args.num_samples is not None:
@@ -179,7 +187,8 @@ def main() -> None:
         if not input_dir.exists():
             logger.error("Input directory does not exist: %s", input_dir)
             raise FileNotFoundError(f"Input directory not found: {input_dir}")
-        input_paths = collect_image_paths(input_dir)
+        input_recursive = bool(data_cfg.get("input_recursive", False))
+        input_paths = collect_image_paths(input_dir, recursive=input_recursive)
         if not input_paths:
             logger.error("No input images found in %s", input_dir)
             raise ValueError("No input images found.")
@@ -188,12 +197,13 @@ def main() -> None:
         logger.info("Resolved input dir: %s", input_dir.resolve())
         logger.info("Resolved output dir: %s", output_dir.resolve())
         logger.info(
-            "Pre-flight: %d inputs | extensions=%s | size range=%s -> %s | dtypes=%s",
+            "Pre-flight: %d inputs | extensions=%s | size range=%s -> %s | dtypes=%s | recursive=%s",
             len(input_paths),
             input_summary.get("extensions"),
             input_summary.get("min_size"),
             input_summary.get("max_size"),
             input_summary.get("sample_dtypes"),
+            input_recursive,
         )
         logger.info(
             "Config: num_samples=%s | pipeline=%s | weight_range=[%.3f, %.3f] | allow_same=%s",

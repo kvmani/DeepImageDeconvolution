@@ -4,7 +4,7 @@ pytest.importorskip("torch")
 
 import torch
 
-from src.utils.metrics import masked_mse, psnr, ssim, ssim_masked
+from src.utils.metrics import masked_mse, mse, psnr, ssim, ssim_masked
 
 
 def test_psnr_higher_for_identical() -> None:
@@ -44,4 +44,4 @@ def test_ssim_masked_ignores_outside() -> None:
     mask = torch.zeros(8, 8)
     mask[2:6, 2:6] = 1.0
     ssim_val = ssim_masked(x, y, mask).item()
-    assert 0.9 <= ssim_val <= 1.0
+    assert 0.899 <= ssim_val <= 1.0

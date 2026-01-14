@@ -1,6 +1,7 @@
 # Debug configuration for synthetic data generation.
 data:
   input_dir: data/code_development_data
+  input_recursive: true
   output_dir: data/synthetic/debug_run
   num_samples: 6
   allow_same: true

@@ -124,4 +124,18 @@ Before marking a task complete or opening a pull request, walk through the follo
 * If configuration defaults change, confirm the change is reflected in `configs/` and corresponding documentation.
 * If any absolute paths or secrets appear, remove them and replace with configurable parameters.
 
+## 11. Logging, Observability, and Script UX
+
+To keep future scripts consistent, traceable, and user-friendly, follow these logging and observability principles for all runnable CLIs:
+
+* **Unified Logging**: Use the shared logging utilities in `src/utils/logging.py` and emit structured logs with timestamps, level, script name, and optional run identifiers. Always log to console, and support optional log files.
+* **CLI Log Controls**: Every script should accept `--log-level`, `--log-file`, `--quiet`, and `--debug` flags. `--debug` must still enable debug mode and should also increase logging verbosity.
+* **Pre-flight Reporting**: Before heavy work, log resolved input/output paths, counts per input split, file type distributions, image size ranges, dtype/bit-depth (when available), key configuration parameters, and any resource/device info.
+* **Validation and Guardrails**: Explicitly validate input paths and required files. Warn or abort early when inputs are missing or empty, and log the reason at `WARNING` or `ERROR` level.
+* **Progress Visibility**: For long-running loops, log progress with counts, percent complete, per-item timing, and ETA (or use progress bars if already in use). Log milestones such as “loading complete,” “preprocessing started,” and “saving outputs.”
+* **Post-run Summary**: Always emit a summary block with runtime, attempted/succeeded/failed/skipped counts, output locations, and any lightweight stats. If failures occurred, log top error reasons and point to an error report file.
+* **Reproducibility**: Log deterministic seeds and RNG usage. Ensure that random, NumPy, and Torch seeds are set where relevant. Record determinism flags or settings used.
+* **Run Manifests**: Write a machine-readable `manifest.json` to each run’s output directory, containing timestamps, git commit hash, arguments, counts, timings, environment details, and failure records.
+* **Signal-to-Noise Discipline**: INFO for milestones and summaries; DEBUG for per-sample details; WARNING for non-fatal anomalies; ERROR for fatal issues with tracebacks.
+
 By following this AGENTS.md, we ensure that the project remains maintainable, reproducible and aligned with its scientific objectives.

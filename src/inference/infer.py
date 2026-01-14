@@ -13,7 +13,7 @@ from src.datasets import KikuchiMixedDataset
 from src.models import build_model
 from src.preprocessing.mask import build_circular_mask
 from src.utils.io import write_image_16bit
-from src.utils.logging import add_file_handler, get_logger
+from src.utils.logging import ProgressLogger, add_file_handler, get_logger
 
 
 def _load_checkpoint(model: torch.nn.Module, checkpoint_path: Path) -> None:
@@ -21,7 +21,7 @@ def _load_checkpoint(model: torch.nn.Module, checkpoint_path: Path) -> None:
     model.load_state_dict(checkpoint["model_state"])
 
 
-def run_inference(config: Dict[str, Any]) -> None:
+def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
     """Run inference and save predicted A/B patterns."""
     log_level_name = str(config.get("logging", {}).get("log_level", "INFO")).upper()
     log_level = getattr(logging, log_level_name, logging.INFO)
@@ -96,49 +96,61 @@ def run_inference(config: Dict[str, Any]) -> None:
 
     weight_rows = []
 
+    processed = 0
+    failed = 0
+    progress = ProgressLogger(total=len(dataset), logger=logger, every=max(1, len(dataset) // 10), unit="img")
+
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader, start=1):
-            c = batch["C"].to(device)
-            pred_a, pred_b, x_hat = model(c)
-            y_hat = 1.0 - x_hat
+            try:
+                c = batch["C"].to(device)
+                pred_a, pred_b, x_hat = model(c)
+                y_hat = 1.0 - x_hat
 
-            if clamp_outputs:
-                pred_a = pred_a.clamp(0.0, 1.0)
-                pred_b = pred_b.clamp(0.0, 1.0)
+                if clamp_outputs:
+                    pred_a = pred_a.clamp(0.0, 1.0)
+                    pred_b = pred_b.clamp(0.0, 1.0)
 
-            if apply_mask:
-                if "mask" in batch:
-                    mask = batch["mask"].to(device)
-                else:
-                    mask = torch.from_numpy(
-                        build_circular_mask(c.shape[-2:]).astype("float32")
-                    ).unsqueeze(0)
-                    mask = mask.to(device)
-                pred_a = pred_a * mask
-                pred_b = pred_b * mask
+                if apply_mask:
+                    if "mask" in batch:
+                        mask = batch["mask"].to(device)
+                    else:
+                        mask = torch.from_numpy(
+                            build_circular_mask(c.shape[-2:]).astype("float32")
+                        ).unsqueeze(0)
+                        mask = mask.to(device)
+                    pred_a = pred_a * mask
+                    pred_b = pred_b * mask
 
-            sample_ids = batch["sample_id"]
-            for i, sample_id in enumerate(sample_ids):
-                a_img = pred_a[i, 0].cpu().numpy()
-                b_img = pred_b[i, 0].cpu().numpy()
-                write_image_16bit(out_dir / "A" / f"{sample_id}_A{suffix}", a_img)
-                write_image_16bit(out_dir / "B" / f"{sample_id}_B{suffix}", b_img)
-                if save_recon:
-                    recon = (
-                        float(x_hat[i].item()) * a_img + float(y_hat[i].item()) * b_img
-                    ).clip(0.0, 1.0)
-                    write_image_16bit(out_dir / "C_hat" / f"{sample_id}_C{suffix}", recon)
-                if save_weights:
-                    weight_rows.append(
-                        {
-                            "sample_id": sample_id,
-                            "x_hat": float(x_hat[i].item()),
-                            "y_hat": float(y_hat[i].item()),
-                        }
-                    )
+                sample_ids = batch["sample_id"]
+                for i, sample_id in enumerate(sample_ids):
+                    a_img = pred_a[i, 0].cpu().numpy()
+                    b_img = pred_b[i, 0].cpu().numpy()
+                    write_image_16bit(out_dir / "A" / f"{sample_id}_A{suffix}", a_img)
+                    write_image_16bit(out_dir / "B" / f"{sample_id}_B{suffix}", b_img)
+                    if save_recon:
+                        recon = (
+                            float(x_hat[i].item()) * a_img + float(y_hat[i].item()) * b_img
+                        ).clip(0.0, 1.0)
+                        write_image_16bit(out_dir / "C_hat" / f"{sample_id}_C{suffix}", recon)
+                    if save_weights:
+                        weight_rows.append(
+                            {
+                                "sample_id": sample_id,
+                                "x_hat": float(x_hat[i].item()),
+                                "y_hat": float(y_hat[i].item()),
+                            }
+                        )
 
-            if batch_idx == 1:
-                logger.info("Processed batch %d with C shape %s", batch_idx, tuple(c.shape))
+                if batch_idx == 1:
+                    logger.info("Processed batch %d with C shape %s", batch_idx, tuple(c.shape))
+            except Exception as exc:
+                failed += len(batch.get("sample_id", []))
+                logger.exception("Failed during inference batch %d: %s", batch_idx, exc)
+                raise
+            finally:
+                processed += len(batch.get("sample_id", []))
+                progress.update(len(batch.get("sample_id", [])))
 
     if save_weights and weight_rows:
         weights_path = out_dir / "weights.csv"
@@ -150,4 +162,15 @@ def run_inference(config: Dict[str, Any]) -> None:
             )
         )
 
+    output_counts = {
+        "A": len(list((out_dir / "A").glob("*.png"))),
+        "B": len(list((out_dir / "B").glob("*.png"))),
+        "C_hat": len(list((out_dir / "C_hat").glob("*.png"))) if save_recon else 0,
+    }
     logger.info("Inference outputs saved to %s", out_dir)
+    return {
+        "processed": processed,
+        "failed": failed,
+        "output_counts": output_counts,
+        "output_dir": str(out_dir),
+    }

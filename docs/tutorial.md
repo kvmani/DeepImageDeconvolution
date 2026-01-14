@@ -13,6 +13,10 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
+### Logging and manifests
+
+Each CLI script emits structured logs and accepts `--log-level`, `--log-file`, `--quiet`, and `--debug` flags. Every run writes a `manifest.json` into its output directory with timing, configuration, and environment metadata.
+
 ## 1. Prepare raw EBSD data
 
 Keep raw inputs unchanged (BMP/PNG/JPG/TIF supported) and create a canonical 16-bit grayscale PNG copy for processing.
@@ -46,6 +50,7 @@ Expected outputs:
 - `data/synthetic/tutorial_run/A`, `data/synthetic/tutorial_run/B`, `data/synthetic/tutorial_run/C`
 - `data/synthetic/tutorial_run/metadata.csv` with mixing metadata
 - `data/synthetic/tutorial_run/config_used.json` with the resolved configuration
+- `data/synthetic/tutorial_run/manifest.json` with run metadata and summary counts
 - `data/synthetic/tutorial_run/debug/` with visualization panels (when `--visualize` is set)
 
 ## 3. Train the model
@@ -62,6 +67,7 @@ Expected outputs:
 - `outputs/train_tutorial/best.pt` and `outputs/train_tutorial/last.pt`
 - `outputs/train_tutorial/checkpoint_epoch_*.pt`
 - `outputs/train_tutorial/history.json` and `outputs/train_tutorial/output.log`
+- `outputs/train_tutorial/manifest.json` with run metadata and summary counts
 - `outputs/train_tutorial/monitoring/` (if image logging is enabled)
 
 ## 4. Run inference
@@ -80,6 +86,7 @@ Expected outputs:
 - `outputs/infer_tutorial/C_hat` with reconstructed mixtures (if enabled)
 - `outputs/infer_tutorial/weights.csv` with `x_hat` and `y_hat`
 - `outputs/infer_tutorial/config_used.json` and `outputs/infer_tutorial/output.log`
+- `outputs/infer_tutorial/manifest.json` with run metadata and summary counts
 
 ## 5. Visualize outputs
 

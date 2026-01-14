@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -12,7 +14,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.training.train import train_model
 from src.utils.config import deep_update, load_config
-from src.utils.logging import get_logger
+from src.utils.logging import (
+    collect_environment,
+    get_git_commit,
+    resolve_log_level,
+    setup_logging,
+    summarize_images,
+    write_manifest,
+)
 from src.utils.run import resolve_run_dir
 
 
@@ -31,6 +40,30 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Append a timestamped run tag to the output directory.",
+    )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        help="Logging level.",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Optional log file path.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Reduce logging to WARNING and above.",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Optional run identifier to include in logs.",
     )
     return parser.parse_args()
 
@@ -59,9 +92,16 @@ def load_base_config(args: argparse.Namespace) -> Dict[str, Any]:
     return load_config(DEFAULT_CONFIG)
 
 
+def _collect_paths(directory: Path, extensions: list[str]) -> list[Path]:
+    return sorted([path for path in directory.iterdir() if path.suffix.lower() in extensions])
+
+
 def main() -> None:
     args = parse_args()
-    logger = get_logger(__name__)
+    log_level = resolve_log_level(args.log_level, debug=args.debug, quiet=args.quiet)
+    log_file = Path(args.log_file) if args.log_file else None
+    run_id = args.run_id or args.run_tag
+    logger = setup_logging("run_train", level=log_level, log_file=log_file, run_id=run_id)
 
     base_config = load_base_config(args)
     overrides = build_overrides(args)
@@ -73,9 +113,103 @@ def main() -> None:
         )
         config.setdefault("output", {})["run_tag"] = args.run_tag
 
-    logger.info("Starting training")
-    train_model(config)
-    logger.info("Training complete")
+    data_cfg = config.get("data", {})
+    debug_cfg = config.get("debug", {})
+    train_cfg = config.get("train", {})
+    preprocess_cfg = data_cfg.get("preprocess", {})
+    output_cfg = config.get("output", {})
+
+    root_dir = Path(data_cfg.get("root_dir", "data/synthetic"))
+    extensions = [ext.lower() for ext in data_cfg.get("extensions", [".png", ".tif", ".tiff"])]
+    a_dir = root_dir / str(data_cfg.get("a_dir", "A"))
+    b_dir = root_dir / str(data_cfg.get("b_dir", "B"))
+    c_dir = root_dir / str(data_cfg.get("c_dir", "C"))
+    out_dir = Path(output_cfg.get("out_dir", "outputs/train_run"))
+
+    manifest: Dict[str, Any] = {
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "git_commit": get_git_commit(REPO_ROOT),
+        "args": vars(args),
+        "environment": collect_environment(),
+        "output_dir": str(out_dir),
+        "config": config,
+        "failures": [],
+    }
+
+    start_time = time.perf_counter()
+    summary: Dict[str, Any] = {}
+    try:
+        if not root_dir.exists():
+            logger.error("Data root directory does not exist: %s", root_dir)
+            raise FileNotFoundError(f"Data root directory not found: {root_dir}")
+
+        a_paths = _collect_paths(a_dir, extensions) if a_dir.exists() else []
+        b_paths = _collect_paths(b_dir, extensions) if b_dir.exists() else []
+        c_paths = _collect_paths(c_dir, extensions) if c_dir.exists() else []
+        if not a_paths or not b_paths or not c_paths:
+            logger.error("Missing training inputs: A=%d B=%d C=%d", len(a_paths), len(b_paths), len(c_paths))
+            raise ValueError("Missing paired training inputs under root_dir.")
+
+        a_summary = summarize_images(a_paths)
+        c_summary = summarize_images(c_paths)
+        logger.info("Resolved root dir: %s", root_dir.resolve())
+        logger.info("Output dir: %s", out_dir.resolve())
+        logger.info(
+            "Pre-flight: A=%d B=%d C=%d | A sizes=%s->%s | C sizes=%s->%s | A dtypes=%s | C dtypes=%s",
+            len(a_paths),
+            len(b_paths),
+            len(c_paths),
+            a_summary.get("min_size"),
+            a_summary.get("max_size"),
+            c_summary.get("min_size"),
+            c_summary.get("max_size"),
+            a_summary.get("sample_dtypes"),
+            c_summary.get("sample_dtypes"),
+        )
+        logger.info(
+            "Config: batch_size=%s | epochs=%s | val_split=%.3f | seed=%s | debug=%s",
+            train_cfg.get("batch_size", 0),
+            train_cfg.get("epochs", 0),
+            float(data_cfg.get("val_split", 0.0)),
+            debug_cfg.get("seed", 42),
+            debug_cfg.get("enabled", False),
+        )
+        logger.info(
+            "Preprocess: mask=%s | normalize=%s | augment=%s | crop=%s",
+            preprocess_cfg.get("mask", {}).get("enabled", True),
+            preprocess_cfg.get("normalize", {}).get("enabled", False),
+            preprocess_cfg.get("augment", {}).get("enabled", False),
+            preprocess_cfg.get("crop", {}).get("enabled", False),
+        )
+
+        logger.info("Starting training")
+        summary = train_model(config)
+        logger.info("Training complete")
+    except Exception as exc:
+        manifest["failures"].append({"error": str(exc)})
+        logger.exception("Training failed")
+        raise
+    finally:
+        duration = time.perf_counter() - start_time
+        manifest.update(
+            {
+                "summary": summary,
+                "timings": {"wall_time_s": duration},
+            }
+        )
+        write_manifest(out_dir, manifest)
+        if manifest["failures"]:
+            error_report = out_dir / "error_report.json"
+            error_report.write_text(json.dumps(manifest["failures"], indent=2))
+            logger.warning("Failures recorded in %s", error_report)
+        logger.info(
+            "Summary: train_samples=%s | val_samples=%s | epochs=%s | runtime=%.2fs | out_dir=%s",
+            summary.get("train_samples"),
+            summary.get("val_samples"),
+            summary.get("epochs"),
+            duration,
+            out_dir,
+        )
 
 
 if __name__ == "__main__":

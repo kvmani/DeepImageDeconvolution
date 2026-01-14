@@ -30,6 +30,7 @@ The generator produces a paired dataset with:
 - `data/synthetic/C/` mixed images
 - `data/synthetic/metadata.csv` with weights (`x`, `y`), provenance, and mask/normalization flags
 - `data/synthetic/config_used.json` capturing the configuration
+- `data/synthetic/manifest.json` with run metadata, timing, and summary counts
 - `data/synthetic/debug/` debug panels (optional)
 
 When masking is enabled, all output images (A/B/C) have the circular mask applied with outside pixels set to zero.
@@ -49,6 +50,13 @@ Key options:
 - `data.mix.*`: mixing pipeline, weights, optional blur/noise, and mix-time normalization settings
 - `data.output.format`: output image format (`png` only)
 - `debug.*`: deterministic seeds, sample limits, and visualization
+
+CLI logging options (available on all scripts):
+
+- `--log-level {DEBUG,INFO,WARNING,ERROR}`
+- `--log-file <path>`
+- `--quiet`
+- `--debug` (enables debug mode and verbose logging)
 
 ## Mixing pipelines
 

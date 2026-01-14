@@ -240,7 +240,7 @@ def _log_epoch_images(
         write_image_log_html(cfg.output_dir, entries, history=history)
 
 
-def train_model(config: Dict[str, Any]) -> None:
+def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     """Train the model using the provided configuration."""
     log_level_name = str(config.get("logging", {}).get("log_level", "INFO")).upper()
     log_level = getattr(logging, log_level_name, logging.INFO)
@@ -494,3 +494,11 @@ def train_model(config: Dict[str, Any]) -> None:
     history_path = out_dir / "history.json"
     with history_path.open("w", encoding="utf-8") as handle:
         json.dump(history, handle, indent=2)
+
+    return {
+        "train_samples": len(train_set),
+        "val_samples": len(val_set) if val_set is not None else 0,
+        "epochs": epochs,
+        "best_val": best_val,
+        "output_dir": str(out_dir),
+    }

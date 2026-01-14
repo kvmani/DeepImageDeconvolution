@@ -154,6 +154,7 @@ In `out_dir`:
 - `monitoring/index.html`: HTML report with per-epoch summary, metric plots, and sample images (8-bit previews) if enabled
 - `config_used.json`: resolved config snapshot for reproducibility
 - `output.log`: file logs (if `logging.log_to_file: true`)
+- `manifest.json`: run metadata, timing, and summary counts
 
 Open `monitoring/index.html` in a browser to review training progress visually.
 

@@ -24,6 +24,7 @@ Outputs in `out_dir`:
 - `history.json` with epoch metrics (including PSNR/SSIM, L2/MSE, and mask-aware variants when masking is enabled)
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
+- `manifest.json` with run metadata, timing, and summary counts
 
 ### Expected tensor shapes (256x256 input)
 
@@ -52,10 +53,11 @@ Outputs in `out_dir`:
 - `C_hat/` reconstructed mixture `x_hat * A_hat + y_hat * B_hat` (optional)
 - `weights.csv` with `x_hat` and `y_hat` per sample (optional)
 - `config_used.json` and `output.log` (if enabled)
+- `manifest.json` with run metadata, timing, and summary counts
 
 ## Logging
 
-Important outputs are logged to screen by default. Set `logging.log_to_file: true` to also write logs to `out_dir/output.log`.
+Important outputs are logged to screen by default. Set `logging.log_to_file: true` to also write logs to `out_dir/output.log`. CLI scripts also accept `--log-level`, `--log-file`, and `--quiet` flags to control verbosity (with `--debug` enabling debug mode and verbose logging).
 
 To append a timestamped run directory:
 

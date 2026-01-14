@@ -22,7 +22,7 @@ from src.preprocessing.transforms import (
     center_crop_to_min,
 )
 from src.utils.io import collect_image_paths, read_image_16bit, to_float01, write_image_16bit
-from src.utils.logging import get_logger
+from src.utils.logging import ProgressLogger, get_logger
 
 
 @dataclass
@@ -265,6 +265,15 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
         and not mix_cfg.get("noise", {}).get("enabled", False)
     )
 
+    logger.info("Initializing synthetic dataset generation.")
+    logger.info(
+        "Config: input_dir=%s | output_dir=%s | num_samples=%d | pipeline=%s",
+        input_dir,
+        output_dir,
+        num_samples,
+        mix_cfg.get("pipeline", "normalize_then_mix"),
+    )
+
     metadata_path = output_dir / "metadata.csv"
     output_cfg = data_cfg.get("output", {})
     output_format = str(output_cfg.get("format", "png")).lower()
@@ -296,7 +305,11 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
         "output_format",
     ]
 
-    summary: Dict[str, Any] = {"samples": 0, "output_dir": str(output_dir)}
+    summary: Dict[str, Any] = {
+        "samples": 0,
+        "output_dir": str(output_dir),
+        "input_images": len(paths),
+    }
 
     config_path = output_dir / "config_used.json"
     with config_path.open("w", encoding="utf-8") as handle:
@@ -306,6 +319,12 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
         writer = csv.DictWriter(handle, fieldnames=metadata_fields)
         writer.writeheader()
 
+        progress = ProgressLogger(
+            total=num_samples,
+            logger=logger,
+            every=max(1, num_samples // 10),
+            unit="sample",
+        )
         for idx in range(num_samples):
             path_a = paths[int(rng.integers(0, len(paths)))]
             path_b = paths[int(rng.integers(0, len(paths)))]
@@ -408,6 +427,7 @@ def generate_synthetic_dataset(config: Dict[str, Any]) -> Dict[str, Any]:
             summary["samples"] += 1
             if debug.enabled and idx % 10 == 0:
                 logger.debug("Generated %s", sample_id)
+            progress.update(1)
 
     logger.info("Generated %s samples in %s", summary["samples"], output_dir)
     return summary

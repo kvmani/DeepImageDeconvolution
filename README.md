@@ -70,6 +70,10 @@ python3 scripts/prepare_experimental_data.py \
 ```
 The script writes a `manifest.json` with checksums and conversion parameters under the output directory.
 
+### Logging and run manifests
+
+All CLI scripts emit structured logs to the console and support `--log-level`, `--log-file`, and `--quiet` flags (with `--debug` enabling verbose logging alongside debug mode). Each run writes a machine-readable `manifest.json` into the output directory with timing, configuration, and environment metadata. When failures occur, the scripts also emit an error report file so partial runs remain traceable.
+
 ## Repository structure
 
 - `docs/` project documentation and mission statement

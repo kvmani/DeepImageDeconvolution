@@ -16,6 +16,12 @@ models/
 logs/
 outputs/
 
+# Reporting build artifacts
+reports/summarize_results/build/
+reports/summarize_results/figures/
+reports/summarize_results/_data/latest.json
+reports/summarize_results/.quarto/
+
 # Notebooks
 .ipynb_checkpoints/
 

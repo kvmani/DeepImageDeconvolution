@@ -1,0 +1,13 @@
+project:
+  type: default
+  output-dir: build
+
+format:
+  revealjs:
+    theme: simple
+    transition: fade
+    slide-number: true
+  beamer:
+    theme: Madrid
+    fontsize: 11pt
+    aspectratio: 169

@@ -1,0 +1,161 @@
+---
+title: "Run Summary"
+format:
+  beamer:
+    theme: Madrid
+    fontsize: 11pt
+    aspectratio: 169
+  revealjs:
+    theme: simple
+    transition: fade
+    slide-number: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{python}
+#| output: asis
+import json
+from pathlib import Path
+
+DATA_PATH = Path("_data/latest.json")
+report = json.loads(DATA_PATH.read_text()) if DATA_PATH.exists() else {}
+figures = report.get("figures", {})
+metrics = report.get("metrics", {})
+notes = report.get("notes") or []
+next_steps = report.get("next_steps") or []
+
+
+def _fmt_value(value):
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    return str(value)
+
+
+def _metric_table(items):
+    if not items:
+        return "_No metrics reported._"
+    lines = ["| Metric | Value |", "|---|---|"]
+    for key in sorted(items.keys()):
+        lines.append(f"| {key} | {_fmt_value(items[key])} |")
+    return "\n".join(lines)
+
+
+def _bullet_list(items, fallback):
+    if not items:
+        return f"- {fallback}"
+    return "\n".join(f"- {item}" for item in items)
+```
+
+# Run Summary
+
+```{python}
+#| output: asis
+run_id = report.get("run_id", "unknown")
+timestamp = report.get("timestamp", "unknown")
+commit = report.get("git_commit", "")
+short_commit = commit[:8] if commit else "unknown"
+dataset = report.get("dataset", "unknown")
+
+print(f"**Run ID:** {run_id}")
+print(f"**Timestamp:** {timestamp}")
+print(f"**Git commit:** {short_commit}")
+print(f"**Dataset:** {dataset}")
+```
+
+---
+
+## What Changed Since Last Time
+
+```{python}
+#| output: asis
+print(_bullet_list(notes, "No notes recorded in report.json."))
+```
+
+---
+
+## Run Details
+
+```{python}
+#| output: asis
+stage = report.get("stage", "unknown")
+dataset_path = report.get("dataset_path", "unknown")
+config_path = report.get("config", "unknown")
+print(f"- Stage: {stage}")
+print(f"- Dataset path: {dataset_path}")
+print(f"- Config: {config_path}")
+```
+
+---
+
+## Quantitative Results
+
+```{python}
+#| output: asis
+print(_metric_table(metrics))
+```
+
+---
+
+## Loss Curve
+
+```{python}
+#| output: asis
+loss_curve = figures.get("loss_curve")
+if loss_curve:
+    print(f"![]({loss_curve})")
+else:
+    print("_No loss curve available._")
+```
+
+```{python}
+#| output: asis
+metrics_curve = figures.get("metrics_curve")
+if metrics_curve:
+    print("---")
+    print("## Metrics Curves")
+    print(f"![]({metrics_curve})")
+```
+
+---
+
+## Qualitative Results
+
+```{python}
+#| output: asis
+qual_grid = figures.get("qual_grid")
+if qual_grid:
+    print(f"![]({qual_grid})")
+else:
+    print("_No qualitative grid available._")
+print("_Note: 16-bit inputs, circular mask policy, and normalization settings follow config_used.json._")
+```
+
+```{python}
+#| output: asis
+weights_plot = figures.get("weights_plot")
+if weights_plot:
+    print("---")
+    print("## Weights Plot")
+    print(f"![]({weights_plot})")
+```
+
+```{python}
+#| output: asis
+failure_modes = figures.get("failure_modes")
+if failure_modes:
+    print("---")
+    print("## Failure Modes")
+    print(_bullet_list(failure_modes, "No failure modes recorded."))
+```
+
+---
+
+## Next Steps
+
+```{python}
+#| output: asis
+print(_bullet_list(next_steps, "No open tasks found in todo_list.md."))
+```

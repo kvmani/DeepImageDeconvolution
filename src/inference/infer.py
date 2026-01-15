@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,7 +16,13 @@ from src.datasets import KikuchiMixedDataset
 from src.models import build_model
 from src.preprocessing.mask import build_circular_mask
 from src.utils.io import write_image_16bit
-from src.utils.logging import ProgressLogger, add_file_handler, get_logger
+from src.utils.logging import ProgressLogger, add_file_handler, get_git_commit, get_logger
+from src.utils.reporting import (
+    make_qual_grid,
+    plot_weights_hist,
+    safe_relpath,
+    write_report_json,
+)
 
 
 def _load_checkpoint(model: torch.nn.Module, checkpoint_path: Path) -> None:
@@ -36,12 +45,20 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
 
     out_dir = Path(output_cfg.get("out_dir", "outputs/infer_run"))
     out_dir.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[2]
+    run_id = out_dir.name
+    monitoring_dir = out_dir / "monitoring"
+    monitoring_dir.mkdir(parents=True, exist_ok=True)
+    qual_grid_path = monitoring_dir / "qual_grid_infer.png"
+    weights_plot_path = monitoring_dir / "weights_hist.png"
     if bool(config.get("logging", {}).get("log_to_file", True)):
         add_file_handler(out_dir / "output.log")
 
     config_path = out_dir / "config_used.json"
     with config_path.open("w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
+    config_relpath = safe_relpath(config_path, repo_root)
+    git_commit = get_git_commit(repo_root) or ""
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Using device: %s", device)
@@ -51,6 +68,8 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
     mixed_dir = Path(data_cfg.get("mixed_dir", "data/synthetic/C"))
+    dataset_tag = str(data_cfg.get("dataset") or data_cfg.get("data_tag") or mixed_dir.name)
+    dataset_path = safe_relpath(mixed_dir, repo_root)
     extensions = data_cfg.get("extensions", [".png", ".tif", ".tiff"])
     preprocess_cfg = data_cfg.get("preprocess", {})
     num_workers = int(data_cfg.get("num_workers", 0))
@@ -95,6 +114,15 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
         (out_dir / "C_hat").mkdir(parents=True, exist_ok=True)
 
     weight_rows = []
+    x_hat_values: List[float] = []
+    recon_l1_sum = 0.0
+    recon_l2_sum = 0.0
+    recon_count = 0
+    qual_limit = 4
+    qual_c: List[np.ndarray] = []
+    qual_a: List[np.ndarray] = []
+    qual_b: List[np.ndarray] = []
+    qual_c_hat: List[np.ndarray] = []
 
     processed = 0
     failed = 0
@@ -122,6 +150,15 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
                     pred_a = pred_a * mask
                     pred_b = pred_b * mask
 
+                x_weight = x_hat.view(-1, 1, 1, 1)
+                recon = (x_weight * pred_a) + ((1.0 - x_weight) * pred_b)
+                recon = recon.clamp(0.0, 1.0)
+                recon_diff = recon - c
+                recon_l1_sum += float(recon_diff.abs().mean().item()) * c.shape[0]
+                recon_l2_sum += float((recon_diff ** 2).mean().item()) * c.shape[0]
+                recon_count += int(c.shape[0])
+                x_hat_values.extend([float(val) for val in x_hat.detach().cpu().view(-1).tolist()])
+
                 sample_ids = batch["sample_id"]
                 for i, sample_id in enumerate(sample_ids):
                     a_img = pred_a[i, 0].cpu().numpy()
@@ -129,10 +166,8 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
                     write_image_16bit(out_dir / "A" / f"{sample_id}_A{suffix}", a_img)
                     write_image_16bit(out_dir / "B" / f"{sample_id}_B{suffix}", b_img)
                     if save_recon:
-                        recon = (
-                            float(x_hat[i].item()) * a_img + float(y_hat[i].item()) * b_img
-                        ).clip(0.0, 1.0)
-                        write_image_16bit(out_dir / "C_hat" / f"{sample_id}_C{suffix}", recon)
+                        recon_img = recon[i, 0].cpu().numpy()
+                        write_image_16bit(out_dir / "C_hat" / f"{sample_id}_C{suffix}", recon_img)
                     if save_weights:
                         weight_rows.append(
                             {
@@ -141,6 +176,11 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
                                 "y_hat": float(y_hat[i].item()),
                             }
                         )
+                    if len(qual_c) < qual_limit:
+                        qual_c.append(c[i, 0].cpu().numpy())
+                        qual_a.append(a_img)
+                        qual_b.append(b_img)
+                        qual_c_hat.append(recon[i, 0].cpu().numpy())
 
                 if batch_idx == 1:
                     logger.info("Processed batch %d with C shape %s", batch_idx, tuple(c.shape))
@@ -161,6 +201,54 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
                 for row in weight_rows
             )
         )
+
+    metrics: Dict[str, float] = {}
+    if recon_count > 0:
+        metrics["recon_l1"] = recon_l1_sum / recon_count
+        metrics["recon_l2"] = recon_l2_sum / recon_count
+    if x_hat_values:
+        metrics["x_hat_mean"] = float(np.mean(x_hat_values))
+        metrics["x_hat_std"] = float(np.std(x_hat_values))
+
+    if qual_c:
+        make_qual_grid(
+            np.stack(qual_c, axis=0),
+            None,
+            None,
+            np.stack(qual_a, axis=0),
+            np.stack(qual_b, axis=0),
+            np.stack(qual_c_hat, axis=0),
+            qual_grid_path,
+        )
+        logger.info("Qual grid saved to %s", qual_grid_path)
+
+    if plot_weights_hist(np.asarray(x_hat_values), weights_plot_path):
+        logger.info("Weights histogram saved to %s", weights_plot_path)
+
+    report_figures: Dict[str, Any] = {
+        "qual_grid": safe_relpath(qual_grid_path, repo_root),
+    }
+    if weights_plot_path.exists():
+        report_figures["weights_plot"] = safe_relpath(weights_plot_path, repo_root)
+
+    report_payload = {
+        "run_id": run_id,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "git_commit": git_commit,
+        "stage": "infer",
+        "dataset": dataset_tag,
+        "dataset_path": dataset_path,
+        "config": config_relpath,
+        "metrics": metrics or {"processed": float(processed)},
+        "figures": report_figures,
+        "notes": [],
+        "artifacts": {
+            "checkpoint": safe_relpath(checkpoint_path, repo_root),
+        },
+    }
+    report_path = write_report_json(out_dir, report_payload)
+    logger.info("Report JSON written to %s", report_path)
+    logger.info("Monitoring figures written to %s", monitoring_dir)
 
     output_counts = {
         "A": len(list((out_dir / "A").glob("*.png"))),

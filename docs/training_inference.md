@@ -22,9 +22,11 @@ Outputs in `out_dir`:
 
 - `best.pt` and `last.pt` checkpoints
 - `history.json` with epoch metrics (including PSNR/SSIM, L2/MSE, and mask-aware variants when masking is enabled)
+- `report.json` with a machine-readable run summary
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
 - `manifest.json` with run metadata, timing, and summary counts
+- `monitoring/loss_curve.png`, `monitoring/qual_grid_latest.png`, and optional metrics/weights plots
 
 ### Expected tensor shapes (256x256 input)
 
@@ -52,6 +54,8 @@ Outputs in `out_dir`:
 - `A/` and `B/` predicted 16-bit PNG patterns
 - `C_hat/` reconstructed mixture `x_hat * A_hat + y_hat * B_hat` (optional)
 - `weights.csv` with `x_hat` and `y_hat` per sample (optional)
+- `report.json` with a machine-readable run summary
+- `monitoring/qual_grid_infer.png` and `monitoring/weights_hist.png`
 - `config_used.json` and `output.log` (if enabled)
 - `manifest.json` with run metadata, timing, and summary counts
 

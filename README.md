@@ -92,12 +92,13 @@ Features implemented now:
 - Paired dataset loading for triplets (C, A, B, x) with debug modes.
 - Baseline dual-output U-Net training and inference with physics-aware reconstruction and weight supervision.
 - Metrics (L1, L2, PSNR, SSIM) and HTML monitoring reports with per-epoch plots.
+- Automated run summaries (`report.json` + curated figures) with a Quarto slide builder.
 - Interactive mixing experiments notebook.
 
 Current status:
 
 - End-to-end synthetic pipeline is functional and tested in debug mode.
-- Monitoring artifacts are written to `<out_dir>/monitoring` during training.
+- Monitoring artifacts and `report.json` summaries are written to `<out_dir>/monitoring` during training/inference.
 - Experimental double-pattern data is included for reference and validation.
 - Advanced models (GAN/attention), orientation metrics, and packaging are still pending.
 
@@ -158,6 +159,33 @@ Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.
 See [`docs/training/README.md`](docs/training/README.md) for detailed training commands and recommended settings. See [`docs/training_inference.md`](docs/training_inference.md) for tensor shapes and inference notes.
 
 When enabled, training also writes an HTML image log under `<out_dir>/monitoring` for quick visual inspection.
+
+## Automated Reporting
+
+Every training or inference run emits a machine-readable summary and curated figures:
+
+- `outputs/<run_id>/report.json`
+- `outputs/<run_id>/monitoring/*.png` (loss curves, qualitative grids, weights plots)
+
+Build slides (PDF + HTML) in one command:
+
+```bash
+scripts/build_summarize_results_report.sh --run-id <run_id>
+```
+
+Outputs:
+- `reports/summarize_results/build/deck.pdf`
+- `reports/summarize_results/build/deck.html`
+
+Requires [Quarto](https://quarto.org) installed and on your PATH.
+
+`report.json` contract (paths are repo-relative):
+
+- `run_id`, `timestamp`, `git_commit`, `stage`, `dataset`, `dataset_path`, `config`
+- `metrics`: dict with at least one numeric metric
+- `figures`: `loss_curve` (train), `qual_grid`, optional `metrics_curve`, `weights_plot`, `failure_modes`
+
+See `reports/summarize_results/README.md` for full details and validation commands.
 
 ## Documentation
 

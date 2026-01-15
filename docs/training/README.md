@@ -6,7 +6,7 @@ This guide explains how to train the current baseline **dual-output U-Net** that
 
 - Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG outputs + metadata CSV).
 - Trains a dual-head U-Net with a combined loss: `L_ab` for `A/B`, `L_recon` for `C_hat = x_hat*A_hat + y_hat*B_hat`, and `L_x` for weight supervision.
-- Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), and the resolved config (`config_used.json`) to an output directory.
+- Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), `report.json`, and the resolved config (`config_used.json`) to an output directory.
 - Periodically writes **visual monitoring** samples (8-bit PNGs) and an HTML index with per-epoch summaries and metric plots for quick inspection of training progress.
 - Uses GPU automatically when available (`cuda`), otherwise CPU.
 
@@ -153,7 +153,12 @@ In `out_dir`:
 - `last.pt`: latest checkpoint
 - `checkpoint_epoch_XXX.pt`: per-epoch checkpoints (controlled by `output.save_every`)
 - `history.json`: epoch-wise metrics (train/val loss, PSNR/SSIM/L2 plus mask-aware variants when validation is enabled)
+- `report.json`: machine-readable summary for slide reporting (`reports/summarize_results`)
 - `monitoring/index.html`: HTML report with per-epoch summary, metric plots, and sample images (8-bit previews) if enabled
+- `monitoring/loss_curve.png`: loss vs epoch curve
+- `monitoring/metrics_curve.png`: optional PSNR/SSIM/reconstruction curves
+- `monitoring/qual_grid_latest.png`: latest qualitative grid (C, A/B gt, A/B pred, C_hat)
+- `monitoring/weights_scatter.png`: optional x_hat vs x_true scatter
 - `config_used.json`: resolved config snapshot for reproducibility
 - `output.log`: file logs (if `logging.log_to_file: true`)
 - `manifest.json`: run metadata, timing, and summary counts

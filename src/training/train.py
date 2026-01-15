@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import random
 import logging
+from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, replace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -21,10 +22,19 @@ from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.engine import evaluate, train_one_epoch
 from src.training.metrics import compute_reconstruction_metrics
 from src.training.optim import build_optimizer, build_scheduler
-from src.utils.logging import add_file_handler, get_logger
+from src.utils.logging import add_file_handler, get_git_commit, get_logger
 from src.utils.io import write_image_8bit
 from src.utils.metrics import aggregate_metrics
-from src.utils.reporting import update_image_log, write_image_log_html
+from src.utils.reporting import (
+    make_qual_grid,
+    plot_loss_curves,
+    plot_metrics_curves,
+    plot_weights_scatter,
+    safe_relpath,
+    update_image_log,
+    write_image_log_html,
+    write_report_json,
+)
 
 
 def _set_seed(seed: int) -> None:
@@ -146,6 +156,161 @@ def _tensor_to_image(tensor: torch.Tensor) -> np.ndarray:
     return np.clip(array, 0.0, 1.0)
 
 
+def _resolve_run_id(out_dir: Path) -> str:
+    """Return deterministic run identifier based on output directory name.
+
+    Parameters
+    ----------
+    out_dir:
+        Output directory for the run.
+
+    Returns
+    -------
+    str
+        Deterministic run identifier.
+    """
+    return out_dir.name
+
+
+def _select_report_metrics(metrics: Dict[str, Any]) -> Dict[str, float]:
+    """Select a compact metrics subset for reporting.
+
+    Parameters
+    ----------
+    metrics:
+        Metrics dictionary from the training loop.
+
+    Returns
+    -------
+    dict of str to float
+        Filtered metrics dictionary.
+    """
+    preferred_keys = [
+        "val_loss",
+        "train_loss",
+        "psnr_a",
+        "psnr_b",
+        "ssim_a",
+        "ssim_b",
+        "l1_recon",
+        "l2_recon",
+        "x_mae",
+    ]
+    selected: Dict[str, float] = {}
+    for key in preferred_keys:
+        value = metrics.get(key)
+        if isinstance(value, (int, float)):
+            selected[key] = float(value)
+    if selected:
+        return selected
+    for key, value in metrics.items():
+        if isinstance(value, (int, float)):
+            selected[key] = float(value)
+    return selected
+
+
+def _render_qual_grid(
+    model: nn.Module,
+    dataset,
+    device: torch.device,
+    out_png: Path,
+    logger,
+) -> bool:
+    """Render the latest qualitative grid from a fixed sample.
+
+    Parameters
+    ----------
+    model:
+        Trained model.
+    dataset:
+        Dataset to sample from.
+    device:
+        Torch device.
+    out_png:
+        Output PNG path.
+    logger:
+        Logger instance.
+
+    Returns
+    -------
+    bool
+        True when a grid is written.
+    """
+    if len(dataset) == 0:
+        logger.warning("Qual grid skipped: dataset is empty.")
+        return False
+    sample = dataset[0]
+    c = sample["C"].unsqueeze(0).to(device)
+    a = sample["A"].unsqueeze(0).to(device)
+    b = sample["B"].unsqueeze(0).to(device)
+
+    model.eval()
+    with torch.no_grad():
+        pred_a, pred_b, x_hat = model(c)
+        pred_a = torch.clamp(pred_a, 0.0, 1.0)
+        pred_b = torch.clamp(pred_b, 0.0, 1.0)
+        x_weight = x_hat.view(-1, 1, 1, 1)
+        pred_recon = torch.clamp(
+            (x_weight * pred_a) + ((1.0 - x_weight) * pred_b),
+            0.0,
+            1.0,
+        )
+
+    make_qual_grid(
+        c[0, 0].detach().cpu().numpy(),
+        a[0, 0].detach().cpu().numpy(),
+        b[0, 0].detach().cpu().numpy(),
+        pred_a[0, 0].detach().cpu().numpy(),
+        pred_b[0, 0].detach().cpu().numpy(),
+        pred_recon[0, 0].detach().cpu().numpy(),
+        out_png,
+    )
+    return True
+
+
+def _collect_weight_pairs(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    max_samples: int = 128,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Collect x_true and x_hat pairs for a small evaluation subset.
+
+    Parameters
+    ----------
+    model:
+        Trained model.
+    loader:
+        DataLoader for evaluation samples.
+    device:
+        Torch device.
+    max_samples:
+        Maximum number of samples to collect.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        Arrays of x_true and x_hat values.
+    """
+    x_true_list: List[np.ndarray] = []
+    x_hat_list: List[np.ndarray] = []
+    total = 0
+    model.eval()
+    with torch.no_grad():
+        for batch in loader:
+            c = batch["C"].to(device)
+            x_true = batch["x"].to(device)
+            _, _, x_hat = model(c)
+            x_true_list.append(x_true.detach().cpu().numpy())
+            x_hat_list.append(x_hat.detach().cpu().numpy())
+            total += int(x_true.numel())
+            if total >= max_samples:
+                break
+    if not x_true_list or not x_hat_list:
+        return np.array([]), np.array([])
+    return np.concatenate(x_true_list, axis=0), np.concatenate(x_hat_list, axis=0)
+
+
 def _log_epoch_images(
     model: nn.Module,
     dataset,
@@ -258,6 +423,15 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
 
     out_dir = Path(output_cfg.get("out_dir", "outputs/train_run"))
     out_dir.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[2]
+    run_id = _resolve_run_id(out_dir)
+    monitoring_dir = out_dir / "monitoring"
+    monitoring_dir.mkdir(parents=True, exist_ok=True)
+    loss_curve_path = monitoring_dir / "loss_curve.png"
+    metrics_curve_path = monitoring_dir / "metrics_curve.png"
+    qual_grid_path = monitoring_dir / "qual_grid_latest.png"
+    weights_plot_path = monitoring_dir / "weights_scatter.png"
+    history_path = out_dir / "history.json"
 
     log_to_file = bool(logging_cfg.get("log_to_file", True))
     if log_to_file:
@@ -268,11 +442,15 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     config_path = out_dir / "config_used.json"
     with config_path.open("w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
+    config_relpath = safe_relpath(config_path, repo_root)
+    git_commit = get_git_commit(repo_root) or ""
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Using device: %s", device)
 
     root_dir = Path(data_cfg.get("root_dir", "data/synthetic"))
+    dataset_tag = str(data_cfg.get("dataset") or data_cfg.get("data_tag") or root_dir.name)
+    dataset_path = safe_relpath(root_dir, repo_root)
     a_dir = str(data_cfg.get("a_dir", "A"))
     b_dir = str(data_cfg.get("b_dir", "B"))
     c_dir = str(data_cfg.get("c_dir", "C"))
@@ -353,6 +531,7 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     grad_clip = float(train_cfg.get("grad_clip", 0.0))
 
     best_val = float("inf")
+    best_path: Path | None = None
     history = []
     start_epoch = 1
     global_step = 0
@@ -425,6 +604,15 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
 
         history.append({"epoch": epoch, **metrics})
 
+        history_path.write_text(json.dumps(history, indent=2))
+        plot_loss_curves(history, loss_curve_path)
+        plot_metrics_curves(history, metrics_curve_path)
+        qual_dataset = val_set if val_set is not None else train_set
+        try:
+            _render_qual_grid(model, qual_dataset, device, qual_grid_path, logger)
+        except Exception as exc:
+            logger.warning("Qual grid update failed: %s", exc)
+
         global_step += len(train_loader)
 
         if scheduler is not None and not scheduler_step_per_batch:
@@ -471,6 +659,36 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
                     config=config,
                 )
 
+        report_figures: Dict[str, Any] = {
+            "loss_curve": safe_relpath(loss_curve_path, repo_root),
+            "qual_grid": safe_relpath(qual_grid_path, repo_root),
+        }
+        if metrics_curve_path.exists():
+            report_figures["metrics_curve"] = safe_relpath(metrics_curve_path, repo_root)
+        if weights_plot_path.exists():
+            report_figures["weights_plot"] = safe_relpath(weights_plot_path, repo_root)
+
+        report_artifacts: Dict[str, str] = {
+            "last_ckpt": safe_relpath(last_path, repo_root),
+        }
+        if best_path is not None:
+            report_artifacts["best_ckpt"] = safe_relpath(best_path, repo_root)
+
+        report_payload = {
+            "run_id": run_id,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "git_commit": git_commit,
+            "stage": "train",
+            "dataset": dataset_tag,
+            "dataset_path": dataset_path,
+            "config": config_relpath,
+            "metrics": _select_report_metrics(history[-1]),
+            "figures": report_figures,
+            "notes": [],
+            "artifacts": report_artifacts,
+        }
+        write_report_json(out_dir, report_payload)
+
         if image_log_cfg.enabled and epoch % image_log_cfg.interval == 0:
             log_dataset = train_set
             if image_log_cfg.split == "val" and val_set is not None:
@@ -481,19 +699,58 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
                 _log_epoch_images(
                     model,
                     log_dataset,
-            image_log_cfg,
-            image_log_state,
-            device,
-            epoch,
-            logger,
-            history,
-        )
+                    image_log_cfg,
+                    image_log_state,
+                    device,
+                    epoch,
+                    logger,
+                    history,
+                )
             except Exception as exc:
                 logger.error("Image logging failed: %s", exc)
 
-    history_path = out_dir / "history.json"
-    with history_path.open("w", encoding="utf-8") as handle:
-        json.dump(history, handle, indent=2)
+    weights_loader = val_loader if val_loader is not None else train_loader
+    try:
+        x_true, x_hat = _collect_weight_pairs(model, weights_loader, device)
+        if plot_weights_scatter(x_true, x_hat, weights_plot_path):
+            logger.info("Weights plot saved to %s", weights_plot_path)
+    except Exception as exc:
+        logger.warning("Weights plot update failed: %s", exc)
+
+    report_figures: Dict[str, Any] = {
+        "loss_curve": safe_relpath(loss_curve_path, repo_root),
+        "qual_grid": safe_relpath(qual_grid_path, repo_root),
+    }
+    if metrics_curve_path.exists():
+        report_figures["metrics_curve"] = safe_relpath(metrics_curve_path, repo_root)
+    if weights_plot_path.exists():
+        report_figures["weights_plot"] = safe_relpath(weights_plot_path, repo_root)
+
+    report_artifacts: Dict[str, str] = {
+        "last_ckpt": safe_relpath(out_dir / "last.pt", repo_root),
+    }
+    if best_path is not None:
+        report_artifacts["best_ckpt"] = safe_relpath(best_path, repo_root)
+
+    if history:
+        report_payload = {
+            "run_id": run_id,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "git_commit": git_commit,
+            "stage": "train",
+            "dataset": dataset_tag,
+            "dataset_path": dataset_path,
+            "config": config_relpath,
+            "metrics": _select_report_metrics(history[-1]),
+            "figures": report_figures,
+            "notes": [],
+            "artifacts": report_artifacts,
+        }
+        report_path = write_report_json(out_dir, report_payload)
+        logger.info("Report JSON written to %s", report_path)
+        logger.info("Monitoring figures written to %s", monitoring_dir)
+
+    history_path.write_text(json.dumps(history, indent=2))
 
     return {
         "train_samples": len(train_set),

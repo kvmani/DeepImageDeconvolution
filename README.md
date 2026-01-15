@@ -134,6 +134,18 @@ Interactive sandbox for mixing A/B into C (pipeline + `wA` slider) that mirrors 
 
 See `docs/mixing_experiments.md` for usage notes.
 
+## Raw mix vs normalized demo notebook
+
+Demonstration-only notebook that contrasts naive algebraic mixing (no normalization) with the normalized mixing pipeline. The raw mix output is explicitly non-physical and must never be used for training or production.
+
+Open [`notebooks/raw_mix_vs_normalized_demo.ipynb`](notebooks/raw_mix_vs_normalized_demo.ipynb) with:
+
+```bash
+jupyter notebook notebooks/raw_mix_vs_normalized_demo.ipynb
+```
+
+See `docs/raw_mix_demo.md` for the warning and usage notes.
+
 ## Training and inference
 
 Train the dual-output U-Net with weight prediction with:
@@ -246,3 +258,4 @@ See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phas
 - `docs/manuscript/results.md` for manuscript results notes
 - `docs/manuscript/discussion.md` for manuscript discussion notes
 - `docs/references/refs.bib` for BibTeX placeholders and citations
+- `docs/raw_mix_demo.md` for the raw-mix vs normalized-mix notebook warning and usage

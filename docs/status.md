@@ -14,6 +14,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - Training and inference CLI wrappers driven by YAML configs and debug modes.
 - Metrics in training (L1, L2, PSNR, SSIM) plus mask-aware variants, with periodic HTML monitoring and per-epoch summaries/plots.
 - Interactive mixing experiments notebook for exploring mixing strategies and parameters.
+- Demonstration notebook comparing raw mixing vs normalized mixing (non-physical raw case for illustration only).
 - Unit and smoke tests covering preprocessing, mixing, data generation, training, and inference.
 
 ## Current Status

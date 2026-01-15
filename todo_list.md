@@ -21,6 +21,7 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Training: standardize experiment naming and output folder conventions for reproducibility.
 - [ ] Metrics: export per-epoch metrics to CSV in addition to `history.json`.
 - [ ] Docs: add a short baseline-results section to `docs/training_inference.md`.
+- [x] Reporting: add lab meeting demo deck with reproducible mixing artifacts and report.json.
 - [x] Data: add a non-destructive preparation script for experimental BMPs with manifest checksums.
 - [x] Metrics: add mask-aware reconstruction metrics and surface them in monitoring.
 - [x] Workflow: add `--run-tag` to standardize timestamped output directories.

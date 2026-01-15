@@ -167,17 +167,24 @@ Every training or inference run emits a machine-readable summary and curated fig
 - `outputs/<run_id>/report.json`
 - `outputs/<run_id>/monitoring/*.png` (loss curves, qualitative grids, weights plots)
 
-Build slides (PDF + HTML) in one command:
+Build slides (PDF by default; HTML optional) in one command:
 
 ```bash
 scripts/build_summarize_results_report.sh --run-id <run_id>
+# Optional HTML output:
+scripts/build_summarize_results_report.sh --run-id <run_id> --html
 ```
 
 Outputs:
 - `reports/summarize_results/build/deck.pdf`
-- `reports/summarize_results/build/deck.html`
+- `reports/summarize_results/build/deck.html` (optional via `--html`)
 
 Requires [Quarto](https://quarto.org) installed and on your PATH.
+PDF output also requires a TeX distribution (TinyTeX recommended):
+
+```bash
+quarto install tinytex
+```
 
 `report.json` contract (paths are repo-relative):
 
@@ -186,6 +193,22 @@ Requires [Quarto](https://quarto.org) installed and on your PATH.
 - `figures`: `loss_curve` (train), `qual_grid`, optional `metrics_curve`, `weights_plot`, `failure_modes`
 
 See `reports/summarize_results/README.md` for full details and validation commands.
+
+### Lab meeting demo deck
+
+Build the lab meeting demo slides (mixing strategies and weight sweep artifacts) in one command:
+
+```bash
+bash scripts/build_lab_meeting_demo.sh
+# Optional HTML output:
+bash scripts/build_lab_meeting_demo.sh --html
+```
+
+Outputs:
+- `reports/lab_meeting_demo/build/deck.pdf`
+- `reports/lab_meeting_demo/build/deck.html` (optional via `--html`)
+
+The demo run also writes `outputs/lab_meeting_demo_<tag>/report.json` plus figures and artifacts. See `reports/lab_meeting_demo/README.md` for the report contract and usage notes.
 
 ## Documentation
 

@@ -5,10 +5,10 @@ format:
     theme: Madrid
     fontsize: 11pt
     aspectratio: 169
-  revealjs:
-    theme: simple
-    transition: fade
-    slide-number: true
+  #revealjs:
+  #  theme: simple
+   # transition: fade
+   # slide-number: true
 execute:
   echo: false
   warning: false

@@ -1,0 +1,195 @@
+---
+title: "Lab Meeting Demo"
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{python}
+#| output: asis
+import json
+import os
+from pathlib import Path
+
+
+def _resolve_repo_dirs():
+    cwd = Path.cwd()
+    if (cwd / "reports" / "lab_meeting_demo").exists():
+        return cwd, cwd / "reports" / "lab_meeting_demo"
+    if cwd.name == "lab_meeting_demo":
+        return cwd.parents[1], cwd
+    for parent in [cwd, *cwd.parents]:
+        if (parent / "README.md").exists():
+            repo_root = parent
+            deck_dir = parent / "reports" / "lab_meeting_demo"
+            if deck_dir.exists():
+                return repo_root, deck_dir
+    return cwd, cwd
+
+
+def _load_report(repo_root: Path, deck_dir: Path) -> dict:
+    latest_path = deck_dir / "_data" / "latest.json"
+    if latest_path.exists():
+        payload = json.loads(latest_path.read_text())
+        if "figures" in payload:
+            return payload
+        report_path = payload.get("report_path")
+        if report_path:
+            resolved = repo_root / report_path
+            if resolved.exists():
+                return json.loads(resolved.read_text())
+    outputs_dir = repo_root / "outputs"
+    if outputs_dir.exists():
+        candidates = sorted(
+            outputs_dir.glob("lab_meeting_demo_*") ,
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for run_dir in candidates:
+            report_path = run_dir / "report.json"
+            if report_path.exists():
+                return json.loads(report_path.read_text())
+    return {}
+
+
+def _relpath(path_str: str, repo_root: Path, deck_dir: Path) -> str:
+    path = Path(path_str)
+    if path.is_absolute():
+        resolved = path
+    else:
+        resolved = repo_root / path
+    return os.path.relpath(resolved, deck_dir)
+
+
+REPO_ROOT, DECK_DIR = _resolve_repo_dirs()
+REPORT = _load_report(REPO_ROOT, DECK_DIR)
+FIGURES = REPORT.get("figures", {})
+NOTES = REPORT.get("notes") or []
+```
+
+# Lab Meeting Demo
+
+```{python}
+#| output: asis
+run_id = REPORT.get("run_id", "unknown")
+timestamp = REPORT.get("timestamp", "unknown")
+commit = REPORT.get("git_commit", "")
+short_commit = commit[:8] if commit else "unknown"
+
+print("**Project:** DeepImageDeconvolution")
+print(f"**Run ID:** {run_id}")
+print(f"**Date:** {timestamp}")
+print(f"**Commit:** {short_commit}")
+```
+
+---
+
+## Problem Definition
+
+We observe mixed EBSD Kikuchi patterns near grain boundaries, where two phase patterns overlap.
+
+$$
+C = \mathrm{normalize}(xA + yB), \quad x + y = 1, \quad x,y \in [0,1]
+$$
+
+Goal: recover $A$, $B$, and $(x,y)$ from $C$ while preserving 16-bit scientific fidelity.
+
+---
+
+## Novelty & Challenge
+
+**Novelty**
+- One-to-two deconvolution with explicit physics-aware reconstruction constraints.
+- 16-bit fidelity, circular masking, and smart normalization built into the mixing pipeline.
+- Practical synthesis of realistic experimental mixes for indexing-relevant outputs.
+
+**Challenge**
+- Ill-posed separation with scale ambiguity between $A$ and $B$.
+- Intensity normalization differences across experimental inputs.
+- Experimental noise/blur and masking introduce non-trivial artifacts.
+- Output fidelity must preserve subtle diffraction details.
+
+---
+
+## Mixing Strategies
+
+```text
+Normalize->Mix:
+A -> norm -> \
+             +--> xA + yB -> C
+B -> norm -> /
+
+Mix->Normalize:
+A -> \
+      +--> xA + yB -> norm -> C
+B -> /
+```
+
+- Ordering changes intensity scaling and the balance between A/B contributions.
+- Normalization inside the circular mask avoids bias from outside zeros.
+- Strategy choice impacts downstream recoverability and fidelity.
+
+---
+
+## Weight Sweep
+
+```{python}
+#| output: asis
+path = FIGURES.get("weight_sweep_grid")
+if path:
+    print(f"![]({_relpath(path, REPO_ROOT, DECK_DIR)})")
+else:
+    print("_weight_sweep_grid.png not found._")
+```
+
+---
+
+## Strategy Comparison
+
+```{python}
+#| output: asis
+path = FIGURES.get("strategy_compare_grid")
+if path:
+    print(f"![]({_relpath(path, REPO_ROOT, DECK_DIR)})")
+else:
+    print("_strategy_compare_grid.png not found._")
+```
+
+---
+
+## Dual U-Net Approach
+
+```text
+C -> [Shared Encoder] -> [Decoder A] -> A_hat
+                     -> [Decoder B] -> B_hat
+                     -> [x_hat head] (optional)
+A_hat, B_hat, x_hat -> Reconstruction -> C_hat -> loss
+```
+
+---
+
+## Closing / Next Steps
+
+```{python}
+#| output: asis
+items = []
+todo_path = REPO_ROOT / "todo_list.md"
+if todo_path.exists():
+    for line in todo_path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("- [ ]"):
+            items.append(line.split("] ", 1)[1].strip())
+
+if not items:
+    items = [
+        "Validate demo on additional experimental patterns",
+        "Tune normalization settings for robustness",
+        "Add quantitative separation metrics",
+        "Expand pattern mixing ablation study",
+        "Finalize slide assets",
+    ]
+
+for item in items[:5]:
+    print(f"- {item}")
+```

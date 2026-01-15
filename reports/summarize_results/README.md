@@ -1,6 +1,6 @@
 # summarize_results (Quarto reporting scaffold)
 
-This folder turns `outputs/<run_id>/report.json` + monitoring figures into a reproducible PDF + HTML slide deck.
+This folder turns `outputs/<run_id>/report.json` + monitoring figures into a reproducible PDF slide deck (HTML is optional).
 
 ## Quickstart
 
@@ -14,6 +14,7 @@ python3 reports/summarize_results/scripts/build_report.py --run-id <run_id>
 
 ```bash
 quarto render reports/summarize_results/deck.qmd --to pdf
+# Optional HTML output:
 quarto render reports/summarize_results/deck.qmd --to revealjs
 ```
 
@@ -21,11 +22,19 @@ Or use the one-shot script:
 
 ```bash
 scripts/build_summarize_results_report.sh --run-id <run_id>
+# Optional HTML output:
+scripts/build_summarize_results_report.sh --run-id <run_id> --html
 ```
 
 Outputs:
 - `reports/summarize_results/build/deck.pdf`
-- `reports/summarize_results/build/deck.html`
+- `reports/summarize_results/build/deck.html` (only when `--html` is used)
+
+PDF output requires a TeX distribution (TinyTeX recommended):
+
+```bash
+quarto install tinytex
+```
 
 ## report.json contract
 

@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -65,6 +67,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional run identifier to include in logs.",
     )
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="key=value",
+        help=(
+            "Repeatable YAML override (dot path) applied last. "
+            "Example: --set train.lr=2e-4 --set data.root_dir=./datasets "
+            "CLI overrides always take precedence over YAML and built-in overrides."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -92,6 +105,36 @@ def load_base_config(args: argparse.Namespace) -> Dict[str, Any]:
     return load_config(DEFAULT_CONFIG)
 
 
+def set_by_path(target: Dict[str, Any], path: str, value: Any) -> None:
+    """Set a nested dict value by dot path, creating intermediate dicts."""
+    parts = path.split(".")
+    cursor = target
+    for part in parts[:-1]:
+        if part not in cursor or not isinstance(cursor.get(part), dict):
+            cursor[part] = {}
+        cursor = cursor[part]
+    cursor[parts[-1]] = value
+
+
+def parse_set_overrides(values: list[str]) -> Dict[str, Any]:
+    """Parse --set CLI overrides into a nested dictionary."""
+    overrides: Dict[str, Any] = {}
+    for raw in values:
+        if "=" not in raw:
+            raise ValueError(f"Invalid --set override '{raw}'. Expected key=value.")
+        key, value_str = raw.split("=", 1)
+        if not key or not value_str:
+            raise ValueError(f"Invalid --set override '{raw}'. Expected key=value.")
+        if any(not part for part in key.split(".")):
+            raise ValueError(f"Invalid --set key '{key}'. Use dot notation like train.lr.")
+        try:
+            value = yaml.safe_load(value_str)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML value for --set {key}: {exc}") from exc
+        set_by_path(overrides, key, value)
+    return overrides
+
+
 def _collect_paths(directory: Path, extensions: list[str]) -> list[Path]:
     return sorted([path for path in directory.iterdir() if path.suffix.lower() in extensions])
 
@@ -113,6 +156,21 @@ def main() -> None:
         )
         config.setdefault("output", {})["run_tag"] = args.run_tag
 
+    try:
+        set_overrides = parse_set_overrides(args.set)
+    except ValueError as exc:
+        logger.error("Failed to parse --set overrides: %s", exc)
+        raise
+
+    if args.set:
+        logger.info("CLI overrides (--set) raw: %s", ", ".join(args.set))
+        logger.info(
+            "CLI overrides (--set) parsed:\n%s",
+            yaml.safe_dump(set_overrides, sort_keys=False).strip(),
+        )
+    if set_overrides:
+        config = deep_update(config, set_overrides)
+
     data_cfg = config.get("data", {})
     debug_cfg = config.get("debug", {})
     train_cfg = config.get("train", {})
@@ -125,6 +183,12 @@ def main() -> None:
     b_dir = root_dir / str(data_cfg.get("b_dir", "B"))
     c_dir = root_dir / str(data_cfg.get("c_dir", "C"))
     out_dir = Path(output_cfg.get("out_dir", "outputs/train_run"))
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    resolved_config_path = out_dir / "resolved_config.yaml"
+    with resolved_config_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle, sort_keys=False)
+    logger.info("Resolved configuration saved to %s", resolved_config_path.resolve())
 
     manifest: Dict[str, Any] = {
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),

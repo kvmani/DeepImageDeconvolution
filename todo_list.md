@@ -26,6 +26,8 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Metrics: add mask-aware reconstruction metrics and surface them in monitoring.
 - [x] Workflow: add `--run-tag` to standardize timestamped output directories.
 - [x] Docs: add a manuscript-style methods document with equations and assumptions.
+- [x] Training: add CLI `--set` overrides with strict precedence and resolved config snapshots.
+- [x] Workflow: add `run_train_jobs.sh` to batch sequential GPU training runs with logging.
 
 ## Next
 

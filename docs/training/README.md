@@ -144,6 +144,8 @@ logging:
 - CLI `--debug` uses `configs/train_debug.yaml` (unless you pass `--config`) and forces debug mode.
 - CLI `--seed ...` overrides `debug.seed` for reproducibility.
 - CLI `--run-tag ...` appends a timestamped suffix to the output directory for reproducible runs.
+- CLI `--set key=value` applies repeatable, dot-path overrides to any config entry.
+  If the same parameter is specified in YAML and via `--set`, the CLI value **always** takes precedence.
 
 ## Outputs
 
@@ -160,6 +162,7 @@ In `out_dir`:
 - `monitoring/qual_grid_latest.png`: latest qualitative grid (C, A/B gt, A/B pred, C_hat)
 - `monitoring/weights_scatter.png`: optional x_hat vs x_true scatter
 - `config_used.json`: resolved config snapshot for reproducibility
+- `resolved_config.yaml`: resolved YAML configuration after applying CLI overrides
 - `output.log`: file logs (if `logging.log_to_file: true`)
 - `manifest.json`: run metadata, timing, and summary counts
 

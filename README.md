@@ -148,6 +148,19 @@ To standardize run naming, append a timestamped tag:
 python3 scripts/run_train.py --config configs/train_default.yaml --run-tag baseline_01
 ```
 
+To override YAML values from the command line, use repeatable `--set` flags (dot-path keys). CLI overrides always take precedence over YAML and built-in overrides:
+
+```bash
+python3 scripts/run_train.py \
+  --config configs/train_default.yaml \
+  --run-tag baseline_01 \
+  --set train.lr=0.0002 \
+  --set train.batch_size=4 \
+  --set data.root_dir=./datasets/exp1
+```
+
+The final resolved configuration is saved to `<out_dir>/resolved_config.yaml` for reproducibility.
+
 Run inference with a checkpoint:
 
 ```bash
@@ -159,6 +172,16 @@ Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.
 See [`docs/training/README.md`](docs/training/README.md) for detailed training commands and recommended settings. See [`docs/training_inference.md`](docs/training_inference.md) for tensor shapes and inference notes.
 
 When enabled, training also writes an HTML image log under `<out_dir>/monitoring` for quick visual inspection.
+
+### Multi-run training on GPU servers
+
+Use the repo-root `run_train_jobs.sh` to launch multiple sequential runs on a GPU node with optional `--set` overrides:
+
+```bash
+bash ./run_train_jobs.sh --cuda_id "0,1" --conda_env ml_env --dryrun false
+```
+
+Edit the `JobList` array inside the script to define each run (config path, run-tag, and any `--set` overrides).
 
 ## Automated Reporting
 

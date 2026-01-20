@@ -2,7 +2,7 @@
 
 This folder contains real experimental Kikuchi patterns acquired from a dual-phase steel (BCC + FCC). These images are used to build and validate this project, generate test data, and benchmark mixing/deconvolution algorithms.
 
-> **Data policy:** The original BMP files are stored in this folder. Bit depth may be 8/16-bit or 32-bit container formats. Keep them unchanged so experiments and benchmarks remain reproducible.
+> **Data policy:** The sample image files in this repository are **8-bit grayscale demo copies** (BMP/PNG) to keep the repo lightweight and render reliably in documentation. Treat them as sample inputs only. When running any pipeline or tests, **scale to 16-bit** (e.g., via `scripts/prepare_experimental_data.py` or on-the-fly during loading) before normalization. Store any original high-bit-depth captures outside the repo and keep the same filenames/structure if you need full-fidelity comparisons.
 
 ## Dataset structure
 
@@ -16,7 +16,7 @@ This folder contains real experimental Kikuchi patterns acquired from a dual-pha
 
 Mixed pattern filenames encode the approximate phase contributions as `BCC-FCC` percentages based on manual inspection. For example:
 
-- `50-50 Double Pattern/50-50_0.bmp` means ~50% BCC and ~50% FCC.
+- `50-50 Double Pattern/50-50_0.png` means ~50% BCC and ~50% FCC.
 - `90-10 Double Pattern/90-10_3.bmp` means ~90% BCC and ~10% FCC.
 
 These percentages are qualitative estimates intended for algorithm development and validation, not ground-truth labels.
@@ -29,5 +29,5 @@ These percentages are qualitative estimates intended for algorithm development a
 
 ## Notes
 
-- Treat these files as raw experimental data; do not overwrite them.
-- Preserve the original bit depth and convert to float only during processing.
+- These demo files are 8-bit; they are not the original high-bit-depth captures.
+- Always rescale to a canonical 16-bit range before processing or training.

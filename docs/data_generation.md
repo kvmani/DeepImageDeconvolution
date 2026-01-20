@@ -9,6 +9,8 @@ This guide documents the synthetic data generation workflow for mixed Kikuchi pa
 - For real experimental examples (BCC/FCC), see `data/raw/Double Pattern Data/` and the pure references under `Good Pattern/`. Mixed patterns in that folder are useful for qualitative evaluation or benchmarking.
 If your inputs are stored in nested subfolders, set `data.input_recursive: true` (or pass `--recursive-input`) so all images are discovered.
 
+The `data/raw/Double Pattern Data/` samples in this repo are **8-bit demo copies** (BMP/PNG) for documentation. Always rescale them to 16-bit before processing (either on load or by preparing 16-bit PNGs).
+
 Inputs may be 8-bit or 32-bit container formats in some cases. For reproducible training, prepare a canonical 16-bit PNG grayscale copy under `data/processed/` with:
 
 ```bash

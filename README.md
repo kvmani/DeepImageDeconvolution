@@ -21,7 +21,7 @@ Example experimental patterns from the dual-phase steel dataset in `data/raw/Dou
 <table>
   <tr>
     <td align="center">
-      <img src="data/raw/Double%20Pattern%20Data/50-50%20Double%20Pattern/50-50_0.bmp" width="220" alt="Mixed pattern C (50% BCC, 50% FCC)">
+      <img src="data/raw/Double%20Pattern%20Data/50-50%20Double%20Pattern/50-50_0.png" width="220" alt="Mixed pattern C (50% BCC, 50% FCC)">
       <br>
       C (mixed)
     </td>
@@ -39,7 +39,7 @@ Example experimental patterns from the dual-phase steel dataset in `data/raw/Dou
   </tr>
 </table>
 
-> **Note:** Experimental samples in `data/raw/Double Pattern Data/` include BMP/JPG files and may be 8-bit or 32-bit container formats. Keep raw files unchanged and use the preparation script to create a canonical 16-bit grayscale PNG copy under `data/processed/` for consistent training. The pipeline scales non-16-bit inputs to 16-bit; logging and visualization outputs remain 8-bit. See `docs/methods.md` for the bit-depth policy.
+> **Note:** The sample images under `data/raw/Double Pattern Data/` are stored as **8-bit grayscale demo copies** (BMP/PNG) so they render reliably in documentation and keep the repo small. Treat them as demo inputs only. For any processing or testing, scale to a canonical 16-bit range (either on load or via `scripts/prepare_experimental_data.py` to create 16-bit PNGs under `data/processed/`). Logging and visualization outputs remain 8-bit. See `docs/methods.md` for the bit-depth policy.
 
 ## Quickstart (synthetic data generation)
 

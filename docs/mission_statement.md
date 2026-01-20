@@ -14,7 +14,7 @@ Given two 16‑bit grayscale Kikuchi patterns **A** and **B**, we form a mixed p
 
 \[C = \mathrm{normalize}(x \cdot A + y \cdot B),\quad x + y = 1,\; x,y \in [0,1].\]
 
-Example experimental patterns in this repository live under `data/raw/Double Pattern Data/` (dual-phase steel: BCC + FCC). For instance, `data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp` (A) and `data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp` (B) are pure references, while `data/raw/Double Pattern Data/50-50 Double Pattern/50-50_0.bmp` is a mixed pattern.
+Example experimental patterns in this repository live under `data/raw/Double Pattern Data/` (dual-phase steel: BCC + FCC). For instance, `data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp` (A) and `data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp` (B) are pure references, while `data/raw/Double Pattern Data/50-50 Double Pattern/50-50_0.png` is a mixed pattern.
 
 The task is twofold:
 
@@ -84,7 +84,7 @@ High quality pure Kikuchi patterns are the foundation for training.  These may c
 * Experimental EBSD data collected on well‑characterised single crystals or polycrystals where patterns can be isolated.
 * Simulated patterns generated via dynamical diffraction calculations.  Synthetic patterns help augment limited experimental data and allow systematic variations of orientation and detector geometry.
 
-Raw inputs may arrive as 16-bit grayscale, but 8-bit or 32-bit container formats can also occur (especially BMP/JPG exports). The repository keeps raw files unchanged and provides a non-destructive preparation step (`scripts/prepare_experimental_data.py`) to create a canonical 16-bit PNG grayscale copy for training and evaluation. The first step in every data pipeline is to scale inputs to 16-bit (when needed) and convert to a canonical floating-point representation within \([0,1]\); logging and visualization outputs remain 8-bit.
+Raw inputs may arrive as 16-bit grayscale, but 8-bit or 32-bit container formats can also occur (especially BMP/JPG exports). The repository ships **8-bit demo copies** of the experimental patterns under `data/raw/Double Pattern Data/` (BMP/PNG) so documentation renders reliably and the repo stays lightweight. For any processing or testing, **scale inputs to 16-bit** (either on load or via `scripts/prepare_experimental_data.py` to create canonical 16-bit PNGs). Keep any original high-bit-depth captures outside the repo for full-fidelity work. The first step in every data pipeline is to scale inputs to 16-bit (when needed) and convert to a canonical floating-point representation within \([0,1]\); logging and visualization outputs remain 8-bit.
 
 ### Pre‑processing
 

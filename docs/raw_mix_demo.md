@@ -24,6 +24,8 @@ jupyter notebook notebooks/raw_mix_vs_normalized_demo.ipynb
 
 The notebook defaults to `data/raw/Double Pattern Data/Good Pattern/` for A/B inputs. Update the path variables in the first code cell to point to your own data if needed.
 
+Note: The sample images in `data/raw/Double Pattern Data/` are stored as 8-bit demo copies (BMP/PNG) for documentation. For any pipeline testing outside this visualization, rescale to a 16-bit range on load (or prepare 16-bit PNGs via `scripts/prepare_experimental_data.py`).
+
 ## Dependencies
 
 The notebook expects `ipywidgets`, `Pillow`, and `matplotlib` to be installed. If `ipywidgets` is not available, the notebook still runs with manual parameter edits.

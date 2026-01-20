@@ -19,7 +19,7 @@ Each CLI script emits structured logs and accepts `--log-level`, `--log-file`, `
 
 ## 1. Prepare raw EBSD data
 
-Keep raw inputs unchanged (BMP/PNG/JPG/TIF supported) and create a canonical 16-bit grayscale PNG copy for processing.
+Keep raw inputs unchanged (BMP/PNG/JPG/TIF supported) and create a canonical 16-bit grayscale PNG copy for processing. The sample images under `data/raw/Double Pattern Data/` in this repo are **8-bit demo copies** (BMP/PNG), so always rescale them to 16-bit before use.
 
 ```bash
 python3 scripts/prepare_experimental_data.py \

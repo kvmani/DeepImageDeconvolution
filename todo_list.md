@@ -16,6 +16,7 @@ This is the operational task list. Update it whenever priorities change, work is
 ## Now (Next 1-2 weeks)
 
 - [x] Data: add recursive input scanning for nested datasets in generation/prep scripts.
+- [x] Data: downscale repo demo BMPs to 8-bit for documentation and record the 16-bit rescaling requirement.
 - [ ] Data: expand inputs using `data/raw/Double Pattern Data` and document preprocessing assumptions.
 - [ ] Data: decide the default mixing pipeline and weight distribution for training, then sync configs/docs.
 - [x] Training: standardize experiment naming and output folder conventions for reproducibility.

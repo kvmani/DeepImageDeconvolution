@@ -12,7 +12,7 @@ Inputs are grayscale Kikuchi patterns stored as BMP/PNG/JPG/TIF. In practice:
 
 All inputs are scaled to a canonical 16-bit grayscale representation for processing, and pipeline outputs are written as 16-bit PNGs. Logging and visualization artifacts remain 8-bit.
 
-The raw files under `data/raw/` are never modified. Use the preparation script to create a canonical training/eval copy under `data/processed/`:
+The raw demo files under `data/raw/Double Pattern Data/` in this repository are stored as **8-bit grayscale copies** to keep the repo small and documentation-friendly. Always rescale them to 16-bit before processing. If you have original high-bit-depth captures, keep them unchanged outside the repo and use the preparation script to create a canonical training/eval copy under `data/processed/`:
 
 ```bash
 python3 scripts/prepare_experimental_data.py \

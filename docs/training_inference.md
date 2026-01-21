@@ -22,11 +22,13 @@ Outputs in `out_dir`:
 
 - `best.pt` and `last.pt` checkpoints
 - `history.json` with epoch metrics (including PSNR/SSIM, L2/MSE, and mask-aware variants when masking is enabled)
-- `report.json` with a machine-readable run summary
+- `history.csv` with per-epoch metrics in CSV form
+- `report.json` with a machine-readable run summary (updated each epoch with status/progress and tracking-sample paths)
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
 - `manifest.json` with run metadata, timing, and summary counts
 - `monitoring/loss_curve.png`, `monitoring/qual_grid_latest.png`, and optional metrics/weights plots
+ - `monitoring/image_log.json` and `monitoring/index.html` when image logging is enabled (used for consistent A/B prediction tracking)
 
 ### Expected tensor shapes (256x256 input)
 
@@ -58,6 +60,17 @@ Outputs in `out_dir`:
 - `monitoring/qual_grid_infer.png` and `monitoring/weights_hist.png`
 - `config_used.json` and `output.log` (if enabled)
 - `manifest.json` with run metadata, timing, and summary counts
+
+## Real-data evaluation
+
+Evaluate a checkpoint against real mixed patterns with masked metrics and a qualitative grid:
+
+```bash
+python3 scripts/evaluate_real_data.py \
+  --config configs/eval_real_default.yaml \
+  --checkpoint outputs/train_run/best.pt \
+  --out_dir outputs/eval_real
+```
 
 ## Logging
 

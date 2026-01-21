@@ -74,6 +74,12 @@ The script writes a `manifest.json` with checksums and conversion parameters und
 ### Logging and run manifests
 
 All CLI scripts emit structured logs to the console and support `--log-level`, `--log-file`, and `--quiet` flags (with `--debug` enabling verbose logging alongside debug mode). Each run writes a machine-readable `manifest.json` into the output directory with timing, configuration, and environment metadata. When failures occur, the scripts also emit an error report file so partial runs remain traceable.
+Training runs also update `report.json` each epoch (with status/progress and tracking-sample image paths when image logging is enabled) so interrupted runs remain summarizable.
+
+### QA and CI
+
+- CI runs `pytest`, a debug training smoke run, and `validate_report.py`.
+- Linting/formatting is handled by `ruff` and `ruff-format` (see `.pre-commit-config.yaml`).
 
 ## Repository structure
 
@@ -181,6 +187,12 @@ python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint ou
 
 Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.csv` with `x_hat`/`y_hat` per sample (when enabled).
 
+Evaluate on real mixed patterns (with masked metrics and qualitative grids) via:
+
+```bash
+python3 scripts/evaluate_real_data.py --config configs/eval_real_default.yaml --checkpoint outputs/train_run/best.pt
+```
+
 See [`docs/training/README.md`](docs/training/README.md) for detailed training commands and recommended settings. See [`docs/training_inference.md`](docs/training_inference.md) for tensor shapes and inference notes.
 
 When enabled, training also writes an HTML image log under `<out_dir>/monitoring` for quick visual inspection.
@@ -252,6 +264,10 @@ See `docs/mission_statement.md` and `docs/roadmap.md` for overall goals and phas
 ## Additional Documentation
 
 - `docs/tutorial.md` for a step-by-step user tutorial
+- `docs/reproducibility.md` for exact data prep → train → infer → report commands
+- `docs/results.md` for baseline result tables and figure links
+- `docs/ablation_protocol.md` for standardized ablation settings
+- `docs/data_provenance.md` for acquisition metadata and licensing
 - `docs/symbols.md` for the math symbol reference
 - `docs/manuscript/introduction.md` for manuscript intro notes
 - `docs/manuscript/methods.md` for manuscript methods notes

@@ -11,16 +11,18 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Reporting: emit report.json + monitoring figures and build Quarto summary decks.
 - [ ] Data: build a larger synthetic dataset and record the exact config and version in docs.
 - [ ] Training: run a baseline training on that dataset and capture key metrics plus monitoring output.
-- [ ] Evaluation: add a CLI evaluation report (PSNR/SSIM/L2) and a CI workflow for pytest + debug smoke runs.
+- [x] Evaluation: add a CLI evaluation report (PSNR/SSIM/L2) and a CI workflow for pytest + debug smoke runs.
 
 ## Now (Next 1-2 weeks)
 
 - [x] Data: add recursive input scanning for nested datasets in generation/prep scripts.
 - [x] Data: downscale repo demo BMPs to 8-bit for documentation and record the 16-bit rescaling requirement.
+- [x] Reporting: update training report.json periodically (status/progress/tracking sample) and add a run-comparison helper script.
+- [x] Reporting: write per-epoch metrics CSV and surface it in report.json artifacts.
+- [x] Reporting: integrate run comparison table into summarize_results deck.
 - [ ] Data: expand inputs using `data/raw/Double Pattern Data` and document preprocessing assumptions.
 - [ ] Data: decide the default mixing pipeline and weight distribution for training, then sync configs/docs.
 - [x] Training: standardize experiment naming and output folder conventions for reproducibility.
-- [ ] Metrics: export per-epoch metrics to CSV in addition to `history.json`.
 - [ ] Docs: add a short baseline-results section to `docs/training_inference.md`.
 - [x] Reporting: add lab meeting demo deck with reproducible mixing artifacts and report.json.
 - [x] Data: add a non-destructive preparation script for experimental BMPs with manifest checksums.
@@ -42,3 +44,10 @@ This is the operational task list. Update it whenever priorities change, work is
 - [ ] Packaging: provide a reproducible environment file (Conda or Docker) with pinned dependencies.
 - [ ] Performance: add mixed precision and data-loader tuning options.
 - [ ] Release: create a release checklist and reproducibility bundle for external users.
+
+## Recent Completions
+
+- [x] Docs: add reproducibility, results, ablation protocol, and data provenance documents.
+- [x] Evaluation: add `scripts/evaluate_real_data.py` for masked real-data metrics and qualitative grids.
+- [x] QA: add CI (pytest + debug train smoke + report validation) and ruff/pre-commit tooling.
+- [x] Tests: add report schema validation and compare_runs smoke test.

@@ -24,6 +24,8 @@ REQUIRED_KEYS = (
     "config",
     "metrics",
     "figures",
+    "status",
+    "progress",
 )
 
 
@@ -98,6 +100,20 @@ def validate_report_payload(
     stage = report.get("stage")
     if stage not in {"train", "infer"}:
         errors.append("stage must be 'train' or 'infer'.")
+
+    status = report.get("status")
+    if status not in {"running", "complete", "interrupted", "failed"}:
+        errors.append("status must be running, complete, interrupted, or failed.")
+
+    progress = report.get("progress")
+    if not isinstance(progress, dict):
+        errors.append("progress must be an object with epoch/epochs_total/global_step.")
+    else:
+        for key in ("epoch", "epochs_total", "global_step"):
+            if key not in progress:
+                errors.append(f"progress.{key} is required.")
+            elif not isinstance(progress.get(key), (int, float)):
+                errors.append(f"progress.{key} must be numeric.")
 
     for key in ("dataset", "dataset_path", "config", "timestamp", "git_commit"):
         if key in report and not isinstance(report.get(key), str):
@@ -174,6 +190,31 @@ def validate_report_payload(
         for key, value in artifacts.items():
             if isinstance(value, str) and Path(value).is_absolute():
                 errors.append(f"artifacts.{key} must be a relative path, not {value}.")
+        if stage == "train":
+            if "history" not in artifacts:
+                errors.append("artifacts.history is required for training runs.")
+            if "metrics_csv" not in artifacts:
+                errors.append("artifacts.metrics_csv is required for training runs.")
+
+    tracking_sample = report.get("tracking_sample")
+    if tracking_sample is not None:
+        if not isinstance(tracking_sample, dict):
+            errors.append("tracking_sample must be an object if provided.")
+        else:
+            for key in ("sample_id", "epoch", "images"):
+                if key not in tracking_sample:
+                    errors.append(f"tracking_sample.{key} is required when tracking_sample is set.")
+            images = tracking_sample.get("images")
+            if images is not None and not isinstance(images, dict):
+                errors.append("tracking_sample.images must be an object.")
+            elif isinstance(images, dict):
+                for key, value in images.items():
+                    if not isinstance(value, str):
+                        errors.append(f"tracking_sample.images.{key} must be a string path.")
+                    elif Path(value).is_absolute():
+                        errors.append(
+                            f"tracking_sample.images.{key} must be a relative path, not {value}."
+                        )
 
     return errors, missing_figures
 

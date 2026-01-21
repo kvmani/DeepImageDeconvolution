@@ -17,6 +17,7 @@ execute:
 
 ```{python}
 #| output: asis
+import csv
 import json
 from pathlib import Path
 
@@ -26,6 +27,8 @@ figures = report.get("figures", {})
 metrics = report.get("metrics", {})
 notes = report.get("notes") or []
 next_steps = report.get("next_steps") or []
+comparison_table = report.get("comparison_table")
+comparison_metrics = report.get("comparison_metrics") or []
 
 
 def _fmt_value(value):
@@ -47,6 +50,26 @@ def _bullet_list(items, fallback):
     if not items:
         return f"- {fallback}"
     return "\n".join(f"- {item}" for item in items)
+
+
+def _comparison_table(path_str, metrics_keys):
+    if not path_str:
+        return "_No comparison table available._"
+    path = Path(path_str)
+    if not path.exists():
+        return "_Comparison table not found._"
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    if not rows:
+        return "_No comparison rows available._"
+    base_cols = ["run_id", "stage", "status", "timestamp", "dataset", "epoch", "epochs_total"]
+    columns = base_cols + list(metrics_keys or [])
+    columns = [col for col in columns if col in reader.fieldnames]
+    lines = ["| " + " | ".join(columns) + " |", "|" + "|".join(["---"] * len(columns)) + "|"]
+    for row in rows:
+        lines.append("| " + " | ".join(str(row.get(col, "")) for col in columns) + " |")
+    return "\n".join(lines)
 ```
 
 # Run Summary
@@ -95,6 +118,15 @@ print(f"- Config: {config_path}")
 ```{python}
 #| output: asis
 print(_metric_table(metrics))
+```
+
+---
+
+## Run Comparison
+
+```{python}
+#| output: asis
+print(_comparison_table(comparison_table, comparison_metrics))
 ```
 
 ---

@@ -1,0 +1,44 @@
+# Default evaluation config for real mixed patterns.
+data:
+  mixed_dir: data/raw/Double Pattern Data/50-50 Double Pattern
+  reference_a: data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp
+  reference_b: data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp
+  allow_non_16bit: true
+  recursive: false
+  extensions: [".png", ".tif", ".tiff", ".bmp", ".jpg", ".jpeg"]
+
+model:
+  name: unet_dual
+  in_channels: 1
+  out_channels: 1
+  base_channels: 32
+  depth: 4
+  up_mode: transpose
+  use_batchnorm: true
+  dropout: 0.0
+  init: kaiming
+
+inference:
+  checkpoint: outputs/train_run/best.pt
+  batch_size: 1
+  clamp_outputs: true
+
+evaluation:
+  qual_limit: 4
+  auto_crop: false
+  apply_mask: true
+  save_weights: true
+
+output:
+  out_dir: outputs/eval_real
+  save_recon: true
+  format: png
+
+logging:
+  log_to_file: true
+  log_level: INFO
+
+debug:
+  enabled: false
+  seed: 42
+  sample_limit: null

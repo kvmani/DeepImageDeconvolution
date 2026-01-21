@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from reports.summarize_results.scripts.validate_report import validate_report_payload
+from scripts.compare_runs import build_comparison_rows, write_comparison_table
 from src.utils.logging import resolve_log_level, setup_logging
 from src.utils.reporting import normalize_path, safe_relpath
 
@@ -227,6 +228,28 @@ def main() -> None:
     if isinstance(failure_modes, list):
         updated_figures["failure_modes"] = failure_modes
 
+    comparison_table = None
+    comparison_metrics = []
+    if metrics:
+        comparison_metrics = sorted([key for key in metrics.keys()])
+        all_reports = sorted((REPO_ROOT / "outputs").glob("*/report.json"))
+        rows, _ = build_comparison_rows(all_reports, metrics_keys=comparison_metrics)
+        rows = [row for row in rows if row.get("stage") == report.get("stage")]
+        if rows:
+            def _ts(row: Dict[str, Any]) -> str:
+                return str(row.get("timestamp") or "")
+
+            rows = sorted(rows, key=_ts, reverse=True)[:10]
+            comparison_path = data_dir / "run_comparison.csv"
+            write_comparison_table(
+                rows,
+                comparison_metrics,
+                comparison_path,
+                output_format="csv",
+                source_glob="outputs/*/report.json",
+            )
+            comparison_table = normalize_path(comparison_path.relative_to(REPORT_ROOT))
+
     next_steps = _extract_next_steps(REPO_ROOT / "todo_list.md")
     notes = report.get("notes") or []
     artifacts = report.get("artifacts") or {}
@@ -236,6 +259,8 @@ def main() -> None:
         "timestamp": report.get("timestamp"),
         "git_commit": report.get("git_commit"),
         "stage": report.get("stage"),
+        "status": report.get("status"),
+        "progress": report.get("progress"),
         "dataset": report.get("dataset"),
         "dataset_path": report.get("dataset_path"),
         "config": report.get("config"),
@@ -243,6 +268,9 @@ def main() -> None:
         "figures": updated_figures,
         "notes": notes,
         "artifacts": artifacts,
+        "tracking_sample": report.get("tracking_sample"),
+        "comparison_table": comparison_table,
+        "comparison_metrics": comparison_metrics,
         "next_steps": next_steps,
         "source_report": safe_relpath(report_path, REPO_ROOT),
     }

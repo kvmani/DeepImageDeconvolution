@@ -6,7 +6,7 @@ This guide explains how to train the current baseline **dual-output U-Net** that
 
 - Loads paired triplets `(C, A, B, x)` from a synthetic dataset folder (16-bit PNG outputs + metadata CSV).
 - Trains a dual-head U-Net with a combined loss: `L_ab` for `A/B`, `L_recon` for `C_hat = x_hat*A_hat + y_hat*B_hat`, and `L_x` for weight supervision.
-- Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), `report.json`, and the resolved config (`config_used.json`) to an output directory.
+- Saves checkpoints (`best.pt`, `last.pt`), metrics history (`history.json`), and a `report.json` summary that is updated **each epoch** (status + progress + tracking sample paths) to survive interruptions.
 - Periodically writes **visual monitoring** samples (8-bit PNGs) and an HTML index with per-epoch summaries and metric plots for quick inspection of training progress.
 - Uses GPU automatically when available (`cuda`), otherwise CPU.
 
@@ -116,14 +116,15 @@ train:
 
 - `logging.image_log.enabled`: `true` to write sample images + HTML report.
 - `logging.image_log.interval`: log every N epochs (e.g., `1` for debug, `5` for regular runs).
-- `logging.image_log.max_samples`: how many samples to log per epoch (typical `2–6`).
+- `logging.image_log.max_samples`: how many samples to log per epoch (typical `1–4`).
 - `logging.image_log.sample_strategy`: `fixed` (deterministic), `first`, or `random` (new each interval).
-- `logging.image_log.sample_ids`: optional fixed list of sample IDs to track over time.
+- `logging.image_log.sample_ids`: optional fixed list of sample IDs to track over time (recommended for a consistent A/B prediction example in the report). Defaults to `sample_000000` for synthetic datasets; if not found, logging falls back to the configured strategy.
 - `logging.image_log.split`: `val` (default) or `train` source split.
 - `logging.image_log.output_dir`: `null` uses `<out_dir>/monitoring`; otherwise set a subfolder.
 - `logging.image_log.image_format`: `png` (recommended).
 - `logging.image_log.include_recon`: when `true`, logs `C_hat = x_hat*A_pred + y_hat*B_pred`.
 - `logging.image_log.mask_metrics`: when `true`, includes mask-aware metrics for circular detectors (default: true).
+- The latest logged sample is surfaced in `report.json` as `tracking_sample` (with image paths) so downstream reports can visualize A/B prediction progress.
 
 Example snippet:
 
@@ -132,7 +133,7 @@ logging:
   image_log:
     enabled: true
     interval: 5
-    max_samples: 4
+    max_samples: 1
     sample_strategy: fixed
     split: val
 ```
@@ -155,7 +156,8 @@ In `out_dir`:
 - `last.pt`: latest checkpoint
 - `checkpoint_epoch_XXX.pt`: per-epoch checkpoints (controlled by `output.save_every`)
 - `history.json`: epoch-wise metrics (train/val loss, PSNR/SSIM/L2 plus mask-aware variants when validation is enabled)
-- `report.json`: machine-readable summary for slide reporting (`reports/summarize_results`)
+- `history.csv`: per-epoch metrics in CSV form (same content as `history.json`)
+- `report.json`: machine-readable summary for slide reporting (`reports/summarize_results`), updated each epoch with `status`, `progress`, and the latest `tracking_sample` image paths when image logging is enabled
 - `monitoring/index.html`: HTML report with per-epoch summary, metric plots, and sample images (8-bit previews) if enabled
 - `monitoring/loss_curve.png`: loss vs epoch curve
 - `monitoring/metrics_curve.png`: optional PSNR/SSIM/reconstruction curves
@@ -167,6 +169,29 @@ In `out_dir`:
 - `manifest.json`: run metadata, timing, and summary counts
 
 Open `monitoring/index.html` in a browser to review training progress visually.
+
+## Comparing runs
+
+Use the comparison helper to tabulate metrics across multiple runs:
+
+```bash
+python3 scripts/compare_runs.py --glob "outputs/*/report.json" --out reports/summarize_results/run_comparison.csv
+```
+
+Filter to a specific metric set:
+
+```bash
+python3 scripts/compare_runs.py --run-id train_run_baseline --run-id train_run_ablation --metrics val_loss,psnr_a,psnr_b
+```
+
+Run grid sweeps with:
+
+```bash
+python3 scripts/sweep_runs.py \
+  --config configs/train_default.yaml \
+  --grid train.learning_rate=1e-4,2e-4 \
+  --run-tag sweep_lr
+```
 
 ## Common issues
 

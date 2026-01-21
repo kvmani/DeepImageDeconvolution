@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install ruff
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Generate debug synthetic data
+        run: |
+          python scripts/generate_data.py --config configs/debug.yaml --debug --seed 7
+      - name: Debug training smoke run
+        run: |
+          python scripts/run_train.py --config configs/train_debug.yaml --debug --out_dir outputs/ci_train_debug --seed 7
+      - name: Validate report.json
+        run: |
+          python reports/summarize_results/scripts/validate_report.py --run-id ci_train_debug
+      - name: Pytest
+        run: |
+          pytest

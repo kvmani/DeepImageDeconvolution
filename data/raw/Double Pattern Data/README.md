@@ -27,6 +27,10 @@ These percentages are qualitative estimates intended for algorithm development a
 - Build realistic test cases for scripts, notebooks, and metrics.
 - Compare synthetic mixing results against observed dual-phase patterns.
 
+## Provenance and licensing
+
+Acquisition metadata and licensing details are tracked in `docs/data_provenance.md`. Update that document when instrument settings or data usage terms change.
+
 ## Notes
 
 - These demo files are 8-bit; they are not the original high-bit-depth captures.

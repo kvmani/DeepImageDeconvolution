@@ -245,7 +245,17 @@ def run_inference(config: Dict[str, Any]) -> Dict[str, Any]:
         "artifacts": {
             "checkpoint": safe_relpath(checkpoint_path, repo_root),
         },
+        "status": "complete",
+        "progress": {
+            "epoch": 1,
+            "epochs_total": 1,
+            "global_step": int(processed),
+        },
     }
+    if save_weights and weight_rows:
+        report_payload["artifacts"]["weights_csv"] = safe_relpath(
+            out_dir / "weights.csv", repo_root
+        )
     report_path = write_report_json(out_dir, report_payload)
     logger.info("Report JSON written to %s", report_path)
     logger.info("Monitoring figures written to %s", monitoring_dir)

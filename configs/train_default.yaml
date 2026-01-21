@@ -64,11 +64,11 @@ logging:
   log_level: INFO
   log_interval: 25
   image_log:
-    enabled: false
+    enabled: true
     interval: 5
-    max_samples: 4
+    max_samples: 1
     sample_strategy: fixed
-    sample_ids: []
+    sample_ids: ["sample_000000"]
     split: val
     output_dir: null
     image_format: png

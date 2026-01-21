@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from html import escape
+import csv
 import json
 import math
 import os
@@ -402,6 +403,40 @@ def write_report_json(run_dir: Path, report_dict: Dict[str, Any]) -> Path:
     report_path = run_dir / "report.json"
     report_path.write_text(json.dumps(report_dict, indent=2))
     return report_path
+
+
+def write_metrics_csv(history: Sequence[Dict[str, Any]], out_csv: Path) -> bool:
+    """Write per-epoch metrics to CSV.
+
+    Parameters
+    ----------
+    history:
+        Sequence of epoch metric dicts.
+    out_csv:
+        Destination CSV path.
+
+    Returns
+    -------
+    bool
+        True when a CSV is written.
+    """
+    if not history:
+        return False
+    fieldnames: List[str] = []
+    for entry in history:
+        for key in entry.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+    if "epoch" in fieldnames:
+        fieldnames.remove("epoch")
+        fieldnames.insert(0, "epoch")
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with out_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for entry in history:
+            writer.writerow({key: entry.get(key) for key in fieldnames})
+    return True
 
 
 def _series_from_history(

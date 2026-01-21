@@ -136,6 +136,7 @@ To keep future scripts consistent, traceable, and user-friendly, follow these lo
 * **Post-run Summary**: Always emit a summary block with runtime, attempted/succeeded/failed/skipped counts, output locations, and any lightweight stats. If failures occurred, log top error reasons and point to an error report file.
 * **Reproducibility**: Log deterministic seeds and RNG usage. Ensure that random, NumPy, and Torch seeds are set where relevant. Record determinism flags or settings used.
 * **Run Manifests**: Write a machine-readable `manifest.json` to each run’s output directory, containing timestamps, git commit hash, arguments, counts, timings, environment details, and failure records.
+* **Report JSON (Training/Inference)**: Long-running scripts must update `report.json` periodically (e.g., per epoch) and on interruption. Include `status` and `progress` fields, keep paths repo-relative, and, when available, record tracking image paths (A/B predictions) so reports can be consumed by automated summarizers.
 * **Signal-to-Noise Discipline**: INFO for milestones and summaries; DEBUG for per-sample details; WARNING for non-fatal anomalies; ERROR for fatal issues with tracebacks.
 
 By following this AGENTS.md, we ensure that the project remains maintainable, reproducible and aligned with its scientific objectives.

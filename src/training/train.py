@@ -33,6 +33,7 @@ from src.utils.reporting import (
     safe_relpath,
     update_image_log,
     write_image_log_html,
+    write_metrics_csv,
     write_report_json,
 )
 
@@ -132,10 +133,16 @@ def _select_log_indices(
                     selected.append(idx)
                     if len(selected) >= cfg.max_samples:
                         break
-            if not selected:
-                logger.warning("No matching sample_ids found for image logging.")
-            state.indices = selected
-        return state.indices
+            if selected:
+                state.indices = selected
+                return state.indices
+            logger.warning(
+                "No matching sample_ids found for image logging; falling back to %s strategy.",
+                cfg.sample_strategy,
+            )
+            state.indices = []
+        if state.indices:
+            return state.indices
 
     strategy = cfg.sample_strategy
     if strategy in ("fixed", "first"):
@@ -320,10 +327,10 @@ def _log_epoch_images(
     epoch: int,
     logger,
     history: List[Dict[str, Any]] | None = None,
-) -> None:
+) -> Optional[Dict[str, Any]]:
     indices = _select_log_indices(dataset, cfg, state, logger)
     if not indices:
-        return
+        return None
 
     epoch_dir = cfg.output_dir / f"epoch_{epoch:03d}"
     epoch_dir.mkdir(parents=True, exist_ok=True)
@@ -403,6 +410,30 @@ def _log_epoch_images(
     entries = update_image_log(cfg.output_dir, entry)
     if cfg.write_html:
         write_image_log_html(cfg.output_dir, entries, history=history)
+    return entry
+
+
+def _tracking_sample_from_entry(
+    entry: Dict[str, Any],
+    cfg: ImageLogConfig,
+    repo_root: Path,
+) -> Optional[Dict[str, Any]]:
+    if not entry or not entry.get("samples"):
+        return None
+    sample = entry["samples"][0]
+    images: Dict[str, str] = {}
+    for key, rel_path in (sample.get("images") or {}).items():
+        images[key] = safe_relpath(cfg.output_dir / Path(rel_path), repo_root)
+    tracking: Dict[str, Any] = {
+        "epoch": entry.get("epoch"),
+        "split": entry.get("split"),
+        "sample_id": sample.get("sample_id"),
+        "images": images,
+    }
+    metrics = sample.get("metrics")
+    if isinstance(metrics, dict):
+        tracking["metrics"] = metrics
+    return tracking
 
 
 def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -432,6 +463,7 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     qual_grid_path = monitoring_dir / "qual_grid_latest.png"
     weights_plot_path = monitoring_dir / "weights_scatter.png"
     history_path = out_dir / "history.json"
+    history_csv_path = out_dir / "history.csv"
 
     log_to_file = bool(logging_cfg.get("log_to_file", True))
     if log_to_file:
@@ -535,6 +567,12 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     history = []
     start_epoch = 1
     global_step = 0
+    last_metrics: Dict[str, Any] = {"train_loss": float("nan")}
+    last_epoch = start_epoch - 1
+    tracking_sample: Optional[Dict[str, Any]] = None
+    image_log_relpath: Optional[str] = None
+    image_log_html_relpath: Optional[str] = None
+    report_status = "running"
 
     resume_path = train_cfg.get("resume_from")
     if resume_path:
@@ -560,105 +598,12 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
             image_log_cfg.split,
         )
 
-    for epoch in range(start_epoch, epochs + 1):
-        metrics = train_one_epoch(
-            model=model,
-            loader=train_loader,
-            optimizer=optimizer,
-            loss_fn=loss_fn,
-            weight_loss_fn=weight_loss_fn,
-            loss_weights=loss_weights,
-            device=device,
-            logger=logger,
-            log_interval=log_interval,
-            grad_clip=grad_clip,
-            scheduler=scheduler,
-            scheduler_step_per_batch=scheduler_step_per_batch,
-        )
-
-        if val_loader is not None:
-            val_metrics = evaluate(
-                model=model,
-                loader=val_loader,
-                loss_fn=loss_fn,
-                weight_loss_fn=weight_loss_fn,
-                loss_weights=loss_weights,
-                device=device,
-                mask_enabled=mask_enabled,
-            )
-            metrics.update(val_metrics)
-            logger.info(
-                "Epoch %d/%d | Train %.6f | Val %.6f | L_ab %.6f | L_recon %.6f | L_x %.6f | x_hat μ/σ %.3f/%.3f",
-                epoch,
-                epochs,
-                metrics["train_loss"],
-                metrics["val_loss"],
-                metrics.get("val_l_ab", 0.0),
-                metrics.get("val_l_recon", 0.0),
-                metrics.get("val_l_x", 0.0),
-                metrics.get("x_hat_mean", 0.0),
-                metrics.get("x_hat_std", 0.0),
-            )
-        else:
-            logger.info("Epoch %d/%d | Train %.6f", epoch, epochs, metrics["train_loss"])
-
-        history.append({"epoch": epoch, **metrics})
-
-        history_path.write_text(json.dumps(history, indent=2))
-        plot_loss_curves(history, loss_curve_path)
-        plot_metrics_curves(history, metrics_curve_path)
-        qual_dataset = val_set if val_set is not None else train_set
-        try:
-            _render_qual_grid(model, qual_dataset, device, qual_grid_path, logger)
-        except Exception as exc:
-            logger.warning("Qual grid update failed: %s", exc)
-
-        global_step += len(train_loader)
-
-        if scheduler is not None and not scheduler_step_per_batch:
-            scheduler.step()
-
-        last_path = out_dir / "last.pt"
-        save_checkpoint(
-            last_path,
-            model,
-            optimizer,
-            epoch,
-            metrics,
-            scheduler=scheduler,
-            step=global_step,
-            config=config,
-        )
-
-        if output_cfg.get("save_every", 1) and epoch % int(output_cfg.get("save_every", 1)) == 0:
-            checkpoint_path = out_dir / f"checkpoint_epoch_{epoch:03d}.pt"
-            save_checkpoint(
-                checkpoint_path,
-                model,
-                optimizer,
-                epoch,
-                metrics,
-                scheduler=scheduler,
-                step=global_step,
-                config=config,
-            )
-
-        if output_cfg.get("save_best", True):
-            current_val = metrics.get("val_loss", metrics["train_loss"])
-            if current_val < best_val:
-                best_val = current_val
-                best_path = out_dir / "best.pt"
-                save_checkpoint(
-                    best_path,
-                    model,
-                    optimizer,
-                    epoch,
-                    metrics,
-                    scheduler=scheduler,
-                    step=global_step,
-                    config=config,
-                )
-
+    def _build_report_payload(
+        metrics: Dict[str, Any],
+        status: str,
+        epoch_idx: int,
+        tracking: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
         report_figures: Dict[str, Any] = {
             "loss_curve": safe_relpath(loss_curve_path, repo_root),
             "qual_grid": safe_relpath(qual_grid_path, repo_root),
@@ -669,12 +614,18 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
             report_figures["weights_plot"] = safe_relpath(weights_plot_path, repo_root)
 
         report_artifacts: Dict[str, str] = {
-            "last_ckpt": safe_relpath(last_path, repo_root),
+            "last_ckpt": safe_relpath(out_dir / "last.pt", repo_root),
+            "history": safe_relpath(history_path, repo_root),
+            "metrics_csv": safe_relpath(history_csv_path, repo_root),
         }
         if best_path is not None:
             report_artifacts["best_ckpt"] = safe_relpath(best_path, repo_root)
+        if image_log_relpath:
+            report_artifacts["image_log"] = image_log_relpath
+        if image_log_html_relpath:
+            report_artifacts["image_log_html"] = image_log_html_relpath
 
-        report_payload = {
+        report_payload: Dict[str, Any] = {
             "run_id": run_id,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "git_commit": git_commit,
@@ -682,75 +633,189 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
             "dataset": dataset_tag,
             "dataset_path": dataset_path,
             "config": config_relpath,
-            "metrics": _select_report_metrics(history[-1]),
+            "metrics": _select_report_metrics(metrics),
             "figures": report_figures,
             "notes": [],
             "artifacts": report_artifacts,
+            "status": status,
+            "progress": {
+                "epoch": epoch_idx,
+                "epochs_total": epochs,
+                "global_step": global_step,
+            },
         }
+        if tracking:
+            report_payload["tracking_sample"] = tracking
+        return report_payload
+
+    def _write_report(
+        metrics: Dict[str, Any],
+        status: str,
+        epoch_idx: int,
+        tracking: Optional[Dict[str, Any]],
+    ) -> None:
+        report_payload = _build_report_payload(metrics, status, epoch_idx, tracking)
         write_report_json(out_dir, report_payload)
 
-        if image_log_cfg.enabled and epoch % image_log_cfg.interval == 0:
-            log_dataset = train_set
-            if image_log_cfg.split == "val" and val_set is not None:
-                log_dataset = val_set
-            elif image_log_cfg.split == "val" and val_set is None:
-                logger.warning("Image logging requested for val split, but no val set exists; using train.")
-            try:
-                _log_epoch_images(
-                    model,
-                    log_dataset,
-                    image_log_cfg,
-                    image_log_state,
-                    device,
-                    epoch,
-                    logger,
-                    history,
-                )
-            except Exception as exc:
-                logger.error("Image logging failed: %s", exc)
-
-    weights_loader = val_loader if val_loader is not None else train_loader
     try:
-        x_true, x_hat = _collect_weight_pairs(model, weights_loader, device)
-        if plot_weights_scatter(x_true, x_hat, weights_plot_path):
-            logger.info("Weights plot saved to %s", weights_plot_path)
-    except Exception as exc:
-        logger.warning("Weights plot update failed: %s", exc)
+        for epoch in range(start_epoch, epochs + 1):
+            metrics = train_one_epoch(
+                model=model,
+                loader=train_loader,
+                optimizer=optimizer,
+                loss_fn=loss_fn,
+                weight_loss_fn=weight_loss_fn,
+                loss_weights=loss_weights,
+                device=device,
+                logger=logger,
+                log_interval=log_interval,
+                grad_clip=grad_clip,
+                scheduler=scheduler,
+                scheduler_step_per_batch=scheduler_step_per_batch,
+            )
 
-    report_figures: Dict[str, Any] = {
-        "loss_curve": safe_relpath(loss_curve_path, repo_root),
-        "qual_grid": safe_relpath(qual_grid_path, repo_root),
-    }
-    if metrics_curve_path.exists():
-        report_figures["metrics_curve"] = safe_relpath(metrics_curve_path, repo_root)
-    if weights_plot_path.exists():
-        report_figures["weights_plot"] = safe_relpath(weights_plot_path, repo_root)
+            if val_loader is not None:
+                val_metrics = evaluate(
+                    model=model,
+                    loader=val_loader,
+                    loss_fn=loss_fn,
+                    weight_loss_fn=weight_loss_fn,
+                    loss_weights=loss_weights,
+                    device=device,
+                    mask_enabled=mask_enabled,
+                )
+                metrics.update(val_metrics)
+                logger.info(
+                    "Epoch %d/%d | Train %.6f | Val %.6f | L_ab %.6f | L_recon %.6f | L_x %.6f | x_hat μ/σ %.3f/%.3f",
+                    epoch,
+                    epochs,
+                    metrics["train_loss"],
+                    metrics["val_loss"],
+                    metrics.get("val_l_ab", 0.0),
+                    metrics.get("val_l_recon", 0.0),
+                    metrics.get("val_l_x", 0.0),
+                    metrics.get("x_hat_mean", 0.0),
+                    metrics.get("x_hat_std", 0.0),
+                )
+            else:
+                logger.info("Epoch %d/%d | Train %.6f", epoch, epochs, metrics["train_loss"])
 
-    report_artifacts: Dict[str, str] = {
-        "last_ckpt": safe_relpath(out_dir / "last.pt", repo_root),
-    }
-    if best_path is not None:
-        report_artifacts["best_ckpt"] = safe_relpath(best_path, repo_root)
+            history.append({"epoch": epoch, **metrics})
 
-    if history:
-        report_payload = {
-            "run_id": run_id,
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "git_commit": git_commit,
-            "stage": "train",
-            "dataset": dataset_tag,
-            "dataset_path": dataset_path,
-            "config": config_relpath,
-            "metrics": _select_report_metrics(history[-1]),
-            "figures": report_figures,
-            "notes": [],
-            "artifacts": report_artifacts,
-        }
+            history_path.write_text(json.dumps(history, indent=2))
+            write_metrics_csv(history, history_csv_path)
+            plot_loss_curves(history, loss_curve_path)
+            plot_metrics_curves(history, metrics_curve_path)
+            qual_dataset = val_set if val_set is not None else train_set
+            try:
+                _render_qual_grid(model, qual_dataset, device, qual_grid_path, logger)
+            except Exception as exc:
+                logger.warning("Qual grid update failed: %s", exc)
+
+            global_step += len(train_loader)
+
+            if scheduler is not None and not scheduler_step_per_batch:
+                scheduler.step()
+
+            last_path = out_dir / "last.pt"
+            save_checkpoint(
+                last_path,
+                model,
+                optimizer,
+                epoch,
+                metrics,
+                scheduler=scheduler,
+                step=global_step,
+                config=config,
+            )
+
+            if output_cfg.get("save_every", 1) and epoch % int(output_cfg.get("save_every", 1)) == 0:
+                checkpoint_path = out_dir / f"checkpoint_epoch_{epoch:03d}.pt"
+                save_checkpoint(
+                    checkpoint_path,
+                    model,
+                    optimizer,
+                    epoch,
+                    metrics,
+                    scheduler=scheduler,
+                    step=global_step,
+                    config=config,
+                )
+
+            if output_cfg.get("save_best", True):
+                current_val = metrics.get("val_loss", metrics["train_loss"])
+                if current_val < best_val:
+                    best_val = current_val
+                    best_path = out_dir / "best.pt"
+                    save_checkpoint(
+                        best_path,
+                        model,
+                        optimizer,
+                        epoch,
+                        metrics,
+                        scheduler=scheduler,
+                        step=global_step,
+                        config=config,
+                    )
+
+            if image_log_cfg.enabled and epoch % image_log_cfg.interval == 0:
+                log_dataset = train_set
+                if image_log_cfg.split == "val" and val_set is not None:
+                    log_dataset = val_set
+                elif image_log_cfg.split == "val" and val_set is None:
+                    logger.warning(
+                        "Image logging requested for val split, but no val set exists; using train."
+                    )
+                try:
+                    entry = _log_epoch_images(
+                        model,
+                        log_dataset,
+                        image_log_cfg,
+                        image_log_state,
+                        device,
+                        epoch,
+                        logger,
+                        history,
+                    )
+                    if entry:
+                        tracking_sample = _tracking_sample_from_entry(entry, image_log_cfg, repo_root)
+                        image_log_relpath = safe_relpath(
+                            image_log_cfg.output_dir / "image_log.json", repo_root
+                        )
+                        if image_log_cfg.write_html:
+                            image_log_html_relpath = safe_relpath(
+                                image_log_cfg.output_dir / "index.html", repo_root
+                            )
+                except Exception as exc:
+                    logger.error("Image logging failed: %s", exc)
+
+            last_metrics = metrics
+            last_epoch = epoch
+            _write_report(metrics, report_status, epoch, tracking_sample)
+
+        report_status = "complete"
+        weights_loader = val_loader if val_loader is not None else train_loader
+        try:
+            x_true, x_hat = _collect_weight_pairs(model, weights_loader, device)
+            if plot_weights_scatter(x_true, x_hat, weights_plot_path):
+                logger.info("Weights plot saved to %s", weights_plot_path)
+        except Exception as exc:
+            logger.warning("Weights plot update failed: %s", exc)
+    except KeyboardInterrupt:
+        report_status = "interrupted"
+        logger.warning("Training interrupted by user.")
+    except Exception:
+        report_status = "failed"
+        logger.exception("Training failed")
+        raise
+    finally:
+        if history:
+            history_path.write_text(json.dumps(history, indent=2))
+            write_metrics_csv(history, history_csv_path)
+        report_payload = _build_report_payload(last_metrics, report_status, last_epoch, tracking_sample)
         report_path = write_report_json(out_dir, report_payload)
         logger.info("Report JSON written to %s", report_path)
         logger.info("Monitoring figures written to %s", monitoring_dir)
-
-    history_path.write_text(json.dumps(history, indent=2))
 
     return {
         "train_samples": len(train_set),

@@ -58,6 +58,12 @@ Required fields:
     "weights_plot": "string",  // optional
     "metrics_curve": "string", // optional
     "failure_modes": ["string"] // optional
+  },
+  "status": "running" | "complete" | "interrupted" | "failed",
+  "progress": {
+    "epoch": 0,
+    "epochs_total": 0,
+    "global_step": 0
   }
 }
 ```
@@ -65,12 +71,15 @@ Required fields:
 Optional fields:
 
 - `notes`: list of short strings.
-- `artifacts`: key/value paths (e.g., `best_ckpt`, `last_ckpt`).
+- `artifacts`: key/value paths (e.g., `best_ckpt`, `last_ckpt`, `history`, `metrics_csv`, `image_log`, `image_log_html`).
+- `tracking_sample`: object with `sample_id`, `epoch`, and per-image paths for A/B prediction tracking (when image logging is enabled).
+- `comparison_table`: relative path to a CSV table of recent runs (used by the deck).
 
 ## Build artifacts
 
 `build_report.py` creates:
 - `reports/summarize_results/_data/latest.json` (data source for the deck)
+- `reports/summarize_results/_data/run_comparison.csv` (recent run comparison table)
 - `reports/summarize_results/figures/*.png` (local copies of report figures)
 - `reports/summarize_results/build/manifest.txt` (copy log)
 

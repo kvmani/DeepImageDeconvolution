@@ -12,6 +12,7 @@ This is the operational task list. Update it whenever priorities change, work is
 - [ ] Data: build a larger synthetic dataset and record the exact config and version in docs.
 - [ ] Training: run a baseline training on that dataset and capture key metrics plus monitoring output.
 - [x] Evaluation: add a CLI evaluation report (PSNR/SSIM/L2) and a CI workflow for pytest + debug smoke runs.
+- [x] Inference: ship a PySide6-based GUI with model caching, metrics export, and manifest logging.
 
 ## Now (Next 1-2 weeks)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -81,6 +81,24 @@ def _collect_images(directory: Path, extensions: Sequence[str], tag: str) -> Dic
         sample_id = stem[:-2] if stem.endswith(f"_{tag}") else stem
         if sample_id in mapping:
             raise ValueError(f"Duplicate sample id {sample_id} in {directory}")
+        mapping[sample_id] = path
+    return mapping
+
+
+def _normalize_sample_id(path: Path, tag: str) -> str:
+    stem = path.stem
+    suffix = f"_{tag}"
+    if stem.endswith(suffix):
+        return stem[: -len(suffix)]
+    return stem
+
+
+def _collect_paths(paths: Iterable[Path], tag: str) -> Dict[str, Path]:
+    mapping: Dict[str, Path] = {}
+    for path in paths:
+        sample_id = _normalize_sample_id(path, tag)
+        if sample_id in mapping:
+            raise ValueError(f"Duplicate sample id {sample_id} from {path}")
         mapping[sample_id] = path
     return mapping
 
@@ -323,6 +341,70 @@ class KikuchiMixedDataset(Dataset):
             sample_ids = sample_ids[: int(limit)]
 
         self.sample_ids = sample_ids
+        self.c_map = c_map
+
+    def __len__(self) -> int:
+        return len(self.sample_ids)
+
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor | str]:
+        sample_id = self.sample_ids[idx]
+        path_c = self.c_map[sample_id]
+        image_c = to_float01(read_image_16bit(path_c))
+
+        mask = None
+        rng = np.random.default_rng(self.seed + idx)
+        if self.preprocess.crop_enabled:
+            if self.preprocess.crop_size is None or len(self.preprocess.crop_size) != 2:
+                raise ValueError("crop.size must be a 2-element list when cropping is enabled.")
+            top, left = compute_crop_indices(
+                image_c.shape, self.preprocess.crop_size, self.preprocess.crop_mode, rng
+            )
+            image_c = apply_crop_indices(image_c, top, left, self.preprocess.crop_size)
+        if self.preprocess.mask_enabled:
+            mask, _ = build_mask_with_metadata(
+                image_c,
+                detect_existing=self.preprocess.detect_existing,
+                zero_tolerance=self.preprocess.zero_tolerance,
+                outside_zero_fraction=self.preprocess.outside_zero_fraction,
+            )
+
+        image_c = _apply_preprocess(image_c, self.preprocess, mask)
+
+        item: Dict[str, torch.Tensor | str] = {
+            "C": torch.from_numpy(image_c).unsqueeze(0),
+            "sample_id": sample_id,
+            "path": str(path_c),
+        }
+        if self.return_mask and mask is not None:
+            item["mask"] = torch.from_numpy(mask.astype(np.float32)).unsqueeze(0)
+        return item
+
+
+class KikuchiMixedListDataset(Dataset):
+    """Dataset returning mixed patterns from a list of image paths."""
+
+    def __init__(
+        self,
+        paths: Sequence[Path],
+        preprocess_cfg: Dict,
+        seed: int = 42,
+        limit: Optional[int] = None,
+        return_mask: bool = False,
+    ) -> None:
+        self.logger = get_logger(__name__)
+        self.preprocess = _parse_preprocess_cfg(preprocess_cfg)
+        self.seed = int(seed)
+        self.return_mask = return_mask
+
+        if not paths:
+            raise ValueError("No mixed samples provided for inference.")
+        if limit is not None:
+            paths = list(paths)[: int(limit)]
+
+        c_map = _collect_paths(paths, "C")
+        if not c_map:
+            raise ValueError("No valid mixed samples provided.")
+        self.sample_ids = sorted(c_map.keys())
         self.c_map = c_map
 
     def __len__(self) -> int:

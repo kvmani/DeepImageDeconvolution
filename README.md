@@ -187,6 +187,19 @@ python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint ou
 
 Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.csv` with `x_hat`/`y_hat` per sample (when enabled).
 
+### Inference GUI
+
+Launch the desktop inference GUI (PySide6) with:
+
+```bash
+python3 scripts/run_inference_gui.py
+```
+
+The GUI loads the same YAML configuration, supports single-image and batch inference, displays a
+linked 2×2 viewer, and exports `run_manifest.json` plus optional metrics files when GT is provided.
+See [`docs/gui_inference.md`](docs/gui_inference.md) for full usage instructions and config
+precedence details.
+
 Evaluate on real mixed patterns (with masked metrics and qualitative grids) via:
 
 ```bash

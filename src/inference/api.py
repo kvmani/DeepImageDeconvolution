@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 import threading
 import time
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -17,6 +17,8 @@ from src.datasets import KikuchiMixedDataset, KikuchiMixedListDataset
 from src.inference.metrics import compute_image_metrics, summarize_metrics
 from src.inference.model_manager import ModelManager
 from src.preprocessing.mask import build_circular_mask
+from src.preprocessing.pipeline import PreprocessConfig, apply_preprocess, parse_preprocess_cfg
+from src.preprocessing.transforms import apply_crop_indices
 from src.utils.config import deep_update
 from src.utils.io import read_image_float01, write_image_16bit
 from src.utils.logging import ProgressLogger, ProgressSnapshot, get_logger
@@ -88,7 +90,9 @@ def _build_dataset(
     preprocess_cfg = data_cfg.get("preprocess", {})
 
     sample_limit = debug_cfg.get("sample_limit") if debug_cfg.get("enabled", False) else None
+    mask_cfg = preprocess_cfg.get("mask", {})
     apply_mask = bool(post_cfg.get("apply_mask", True))
+    return_mask = apply_mask or bool(mask_cfg.get("enabled", True))
     seed = int(debug_cfg.get("seed", 42))
 
     if input_paths is None:
@@ -100,15 +104,69 @@ def _build_dataset(
             preprocess_cfg=preprocess_cfg,
             seed=seed,
             limit=sample_limit,
-            return_mask=apply_mask,
+            return_mask=return_mask,
         )
     return KikuchiMixedListDataset(
         paths=input_paths,
         preprocess_cfg=preprocess_cfg,
         seed=seed,
         limit=sample_limit,
-        return_mask=apply_mask,
+        return_mask=return_mask,
     )
+
+
+def _extract_crop_meta(
+    batch: Dict[str, Any],
+    index: int,
+) -> Optional[Tuple[int, int, Tuple[int, int]]]:
+    crop = batch.get("crop")
+    if not isinstance(crop, dict):
+        return None
+    enabled = crop.get("enabled")
+    if enabled is None:
+        return None
+    if isinstance(enabled, torch.Tensor):
+        enabled_value = bool(enabled[index].item())
+    else:
+        enabled_value = bool(enabled[index])
+    if not enabled_value:
+        return None
+    top = crop.get("top")
+    left = crop.get("left")
+    height = crop.get("height")
+    width = crop.get("width")
+    if top is None or left is None or height is None or width is None:
+        return None
+    if isinstance(top, torch.Tensor):
+        top_value = int(top[index].item())
+        left_value = int(left[index].item())
+        height_value = int(height[index].item())
+        width_value = int(width[index].item())
+    else:
+        top_value = int(top[index])
+        left_value = int(left[index])
+        height_value = int(height[index])
+        width_value = int(width[index])
+    return top_value, left_value, (height_value, width_value)
+
+
+def _preprocess_gt(
+    gt_image: np.ndarray,
+    preprocess_cfg: PreprocessConfig,
+    mask_np: Optional[np.ndarray],
+    crop_meta: Optional[Tuple[int, int, Tuple[int, int]]],
+    logger: logging.Logger,
+    sample_id: str,
+) -> Optional[np.ndarray]:
+    if preprocess_cfg.crop_enabled:
+        if crop_meta is None:
+            logger.warning(
+                "Skipping GT metrics for %s because crop metadata is missing.", sample_id
+            )
+            return None
+        top, left, crop_size = crop_meta
+        gt_image = apply_crop_indices(gt_image, top, left, crop_size)
+    return apply_preprocess(gt_image, preprocess_cfg, mask_np)
 
 
 def _normalize_sample_id(path: Path, tag: str) -> str:
@@ -149,6 +207,7 @@ def run_inference_core(
     inference_cfg = config.get("inference", {})
     output_cfg = config.get("output", {})
     post_cfg = config.get("postprocess", {})
+    preprocess_cfg = parse_preprocess_cfg(data_cfg.get("preprocess", {}))
 
     out_dir = Path(output_dir or output_cfg.get("out_dir", "outputs/infer_run"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -291,8 +350,15 @@ def run_inference_core(
                         mask_np = None
                         if mask is not None:
                             mask_np = mask[i, 0].cpu().numpy()
+                        crop_meta = _extract_crop_meta(batch, i)
                         if gt_a_path is not None:
                             gt_a = read_image_float01(gt_a_path, allow_non_16bit=True)
+                            gt_a = _preprocess_gt(
+                                gt_a, preprocess_cfg, mask_np, crop_meta, logger, str(sample_id)
+                            )
+                            if gt_a is None:
+                                gt_a_path = None
+                        if gt_a_path is not None:
                             metrics.update(
                                 {
                                     f"a_{key}": value
@@ -303,6 +369,12 @@ def run_inference_core(
                             )
                         if gt_b_path is not None:
                             gt_b = read_image_float01(gt_b_path, allow_non_16bit=True)
+                            gt_b = _preprocess_gt(
+                                gt_b, preprocess_cfg, mask_np, crop_meta, logger, str(sample_id)
+                            )
+                            if gt_b is None:
+                                gt_b_path = None
+                        if gt_b_path is not None:
                             metrics.update(
                                 {
                                     f"b_{key}": value

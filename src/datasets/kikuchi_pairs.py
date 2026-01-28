@@ -1,7 +1,6 @@
 """Datasets for Kikuchi pattern deconvolution."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Sequence, Tuple
 
@@ -10,8 +9,8 @@ import torch
 from torch.utils.data import Dataset, random_split
 import csv
 
-from src.preprocessing.mask import apply_circular_mask, build_mask_with_metadata
-from src.preprocessing.normalise import normalize_with_metadata
+from src.preprocessing.mask import build_mask_with_metadata
+from src.preprocessing.pipeline import PreprocessConfig, apply_preprocess, parse_preprocess_cfg
 from src.preprocessing.transforms import (
     apply_crop_indices,
     apply_flip,
@@ -22,51 +21,6 @@ from src.utils.io import read_image_16bit, to_float01
 from src.utils.logging import get_logger
 
 
-@dataclass
-class PreprocessConfig:
-    """Preprocessing configuration for datasets."""
-
-    crop_enabled: bool
-    crop_size: Optional[Tuple[int, int]]
-    crop_mode: str
-    mask_enabled: bool
-    detect_existing: bool
-    outside_zero_fraction: float
-    zero_tolerance: float
-    normalize_enabled: bool
-    normalize_method: str
-    normalize_smart: bool
-    histogram_bins: int
-    percentile: Tuple[float, float]
-    augment_enabled: bool
-    flip_horizontal: bool
-    flip_vertical: bool
-    rotate90: bool
-
-
-def _parse_preprocess_cfg(cfg: Dict) -> PreprocessConfig:
-    crop_cfg = cfg.get("crop", {})
-    mask_cfg = cfg.get("mask", {})
-    normalize_cfg = cfg.get("normalize", {})
-    augment_cfg = cfg.get("augment", {})
-    return PreprocessConfig(
-        crop_enabled=bool(crop_cfg.get("enabled", False)),
-        crop_size=tuple(crop_cfg.get("size", [])) if crop_cfg.get("size") else None,
-        crop_mode=str(crop_cfg.get("mode", "center")),
-        mask_enabled=bool(mask_cfg.get("enabled", True)),
-        detect_existing=bool(mask_cfg.get("detect_existing", True)),
-        outside_zero_fraction=float(mask_cfg.get("outside_zero_fraction", 0.98)),
-        zero_tolerance=float(mask_cfg.get("zero_tolerance", 1e-6)),
-        normalize_enabled=bool(normalize_cfg.get("enabled", False)),
-        normalize_method=str(normalize_cfg.get("method", "min_max")),
-        normalize_smart=bool(normalize_cfg.get("smart", True)),
-        histogram_bins=int(normalize_cfg.get("histogram_bins", 4096)),
-        percentile=tuple(normalize_cfg.get("percentile", (1.0, 99.0))),
-        augment_enabled=bool(augment_cfg.get("enabled", False)),
-        flip_horizontal=bool(augment_cfg.get("flip_horizontal", True)),
-        flip_vertical=bool(augment_cfg.get("flip_vertical", True)),
-        rotate90=bool(augment_cfg.get("rotate90", True)),
-    )
 
 
 def _collect_images(directory: Path, extensions: Sequence[str], tag: str) -> Dict[str, Path]:
@@ -119,20 +73,7 @@ def _apply_preprocess(
     cfg: PreprocessConfig,
     mask: Optional[np.ndarray],
 ) -> np.ndarray:
-    if cfg.mask_enabled and mask is not None:
-        image = apply_circular_mask(image, mask)
-
-    if cfg.normalize_enabled:
-        image, _ = normalize_with_metadata(
-            image,
-            method=cfg.normalize_method,
-            histogram_bins=cfg.histogram_bins,
-            percentile=cfg.percentile,
-            mask=mask,
-            smart_minmax=cfg.normalize_smart,
-        )
-
-    return image.astype(np.float32)
+    return apply_preprocess(image, cfg, mask)
 
 
 def split_dataset(
@@ -178,7 +119,7 @@ class KikuchiPairDataset(Dataset):
         self.logger = get_logger(__name__)
         self.root_dir = root_dir
         self.extensions = extensions
-        self.preprocess = _parse_preprocess_cfg(preprocess_cfg)
+        self.preprocess = parse_preprocess_cfg(preprocess_cfg)
         self.seed = int(seed)
         self.weight_tolerance = float(weight_tolerance)
 
@@ -327,7 +268,7 @@ class KikuchiMixedDataset(Dataset):
         self.logger = get_logger(__name__)
         self.mixed_dir = mixed_dir
         self.extensions = extensions
-        self.preprocess = _parse_preprocess_cfg(preprocess_cfg)
+        self.preprocess = parse_preprocess_cfg(preprocess_cfg)
         self.seed = int(seed)
         self.return_mask = return_mask
 
@@ -353,6 +294,10 @@ class KikuchiMixedDataset(Dataset):
 
         mask = None
         rng = np.random.default_rng(self.seed + idx)
+        crop_top = 0
+        crop_left = 0
+        crop_height = image_c.shape[0]
+        crop_width = image_c.shape[1]
         if self.preprocess.crop_enabled:
             if self.preprocess.crop_size is None or len(self.preprocess.crop_size) != 2:
                 raise ValueError("crop.size must be a 2-element list when cropping is enabled.")
@@ -360,6 +305,9 @@ class KikuchiMixedDataset(Dataset):
                 image_c.shape, self.preprocess.crop_size, self.preprocess.crop_mode, rng
             )
             image_c = apply_crop_indices(image_c, top, left, self.preprocess.crop_size)
+            crop_top = top
+            crop_left = left
+            crop_height, crop_width = self.preprocess.crop_size
         if self.preprocess.mask_enabled:
             mask, _ = build_mask_with_metadata(
                 image_c,
@@ -374,6 +322,13 @@ class KikuchiMixedDataset(Dataset):
             "C": torch.from_numpy(image_c).unsqueeze(0),
             "sample_id": sample_id,
             "path": str(path_c),
+            "crop": {
+                "enabled": self.preprocess.crop_enabled,
+                "top": crop_top,
+                "left": crop_left,
+                "height": crop_height,
+                "width": crop_width,
+            },
         }
         if self.return_mask and mask is not None:
             item["mask"] = torch.from_numpy(mask.astype(np.float32)).unsqueeze(0)
@@ -392,7 +347,7 @@ class KikuchiMixedListDataset(Dataset):
         return_mask: bool = False,
     ) -> None:
         self.logger = get_logger(__name__)
-        self.preprocess = _parse_preprocess_cfg(preprocess_cfg)
+        self.preprocess = parse_preprocess_cfg(preprocess_cfg)
         self.seed = int(seed)
         self.return_mask = return_mask
 
@@ -417,6 +372,10 @@ class KikuchiMixedListDataset(Dataset):
 
         mask = None
         rng = np.random.default_rng(self.seed + idx)
+        crop_top = 0
+        crop_left = 0
+        crop_height = image_c.shape[0]
+        crop_width = image_c.shape[1]
         if self.preprocess.crop_enabled:
             if self.preprocess.crop_size is None or len(self.preprocess.crop_size) != 2:
                 raise ValueError("crop.size must be a 2-element list when cropping is enabled.")
@@ -424,6 +383,9 @@ class KikuchiMixedListDataset(Dataset):
                 image_c.shape, self.preprocess.crop_size, self.preprocess.crop_mode, rng
             )
             image_c = apply_crop_indices(image_c, top, left, self.preprocess.crop_size)
+            crop_top = top
+            crop_left = left
+            crop_height, crop_width = self.preprocess.crop_size
         if self.preprocess.mask_enabled:
             mask, _ = build_mask_with_metadata(
                 image_c,
@@ -438,6 +400,13 @@ class KikuchiMixedListDataset(Dataset):
             "C": torch.from_numpy(image_c).unsqueeze(0),
             "sample_id": sample_id,
             "path": str(path_c),
+            "crop": {
+                "enabled": self.preprocess.crop_enabled,
+                "top": crop_top,
+                "left": crop_left,
+                "height": crop_height,
+                "width": crop_width,
+            },
         }
         if self.return_mask and mask is not None:
             item["mask"] = torch.from_numpy(mask.astype(np.float32)).unsqueeze(0)

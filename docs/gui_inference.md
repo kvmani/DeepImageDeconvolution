@@ -49,6 +49,13 @@ Provide GT inputs to compute metrics for `A_hat` vs `A` and `B_hat` vs `B`.
 - **Batch mode**: choose A/B folders plus a glob pattern. Matching uses the sample ID derived from
   file stems (suffixes like `_A`, `_B`, and `_C` are stripped automatically).
 
+### Preprocessing alignment for metrics
+
+When GT is provided, the GUI applies the same preprocessing pipeline (crop/mask/normalize) that was
+used for the mixed inputs before computing metrics. This keeps shapes and intensity ranges aligned
+with model predictions. If cropping is enabled, the GT crop indices match the input crop used for
+each sample.
+
 ## Outputs
 
 The GUI writes outputs to the configured output directory:
@@ -80,6 +87,10 @@ If GT is supplied, the GUI computes per-image metrics and writes:
   `b_ssim`)
 - `metrics.json`: summary averages and the per-sample table
 
+In batch runs, it is valid for some samples to have only A or only B ground truth. The CSV export
+automatically unions available metric keys across samples so partial GT coverage does not break the
+export.
+
 ## Visualization
 
 The viewer uses a linked 2×2 grid:
@@ -106,5 +117,7 @@ The GUI uses the shared project logging utilities and exposes a log panel with:
 - Model loading is lazy and cached across runs. Switching checkpoints triggers a reload, while
   repeated runs with the same settings reuse the cached model.
 - Use the **Cancel** button to stop long batch runs; partial outputs and manifests are still saved.
+- If you enable cropping in `data.preprocess`, provide GT images with the original uncropped sizes
+  so the GUI can apply identical crop indices before computing metrics.
 
 For CLI usage, see `docs/training_inference.md`.

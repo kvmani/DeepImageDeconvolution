@@ -52,3 +52,5 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Evaluation: add `scripts/evaluate_real_data.py` for masked real-data metrics and qualitative grids.
 - [x] QA: add CI (pytest + debug train smoke + report validation) and ruff/pre-commit tooling.
 - [x] Tests: add report schema validation and compare_runs smoke test.
+- [x] Inference: align GT preprocessing with input preprocessing for metrics and support mixed GT keys in GUI exports.
+- [x] Docs: expand inference CLI and GUI usage guidance.

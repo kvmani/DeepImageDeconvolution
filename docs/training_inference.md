@@ -51,6 +51,50 @@ Run inference on mixed patterns (C) with a trained checkpoint:
 python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint outputs/train_run/best.pt
 ```
 
+### CLI arguments overview
+
+Key CLI arguments (run `python3 scripts/run_infer.py --help` for the full list):
+
+- `--config`: YAML config for inference defaults.
+- `--checkpoint`: Path to the trained checkpoint (`best.pt` or `last.pt`).
+- `--out_dir`: Optional output directory override.
+- `--run-tag`: Optional run tag appended to output dir (timestamped).
+- `--run-id`: Optional run identifier included in logs and manifests.
+- `--debug`: Enable debug mode (small sample set + verbose logging).
+- Logging flags: `--log-level`, `--log-file`, `--quiet`.
+
+### Configuration essentials
+
+The inference YAML config mirrors training settings but focuses on model loading, preprocessing, and
+output controls. Important fields include:
+
+- `inference.checkpoint`: checkpoint path (overridden by `--checkpoint`).
+- `inference.batch_size`: batch size for prediction.
+- `inference.device`: `auto`, `cpu`, or `cuda`.
+- `inference.clamp_outputs`: clamp predictions to `[0, 1]`.
+- `data.mixed_dir`: root directory for mixed patterns `C` (batch mode).
+- `data.extensions`: allowed file extensions.
+- `data.preprocess`: crop/mask/normalize pipeline applied to inputs (and GT metrics).
+- `postprocess.apply_mask`: whether to apply the circular mask to outputs.
+- `output.out_dir`: base output directory.
+- `output.save_recon`: save reconstructed `C_hat`.
+- `output.save_weights`: write `weights.csv` with `x_hat/y_hat`.
+
+### Inputs
+
+**Batch mode** (default) reads from `data.mixed_dir` and scans for files with `_C` suffixes. To run
+inference on a specific dataset, update the config to point at the desired folder.
+
+Supported formats: PNG/TIFF/BMP/JPG. Non-16-bit inputs are rescaled to a canonical 16-bit range
+before normalization.
+
+### Ground truth metrics
+
+When GT data is provided (via the optional GT fields in `infer_default.yaml` or in evaluation
+scripts), metrics are computed after applying the same preprocessing pipeline configured for the
+inputs. This ensures crops, masks, and normalization steps are consistent between predictions and
+GT. The mask is applied when enabled to keep metrics inside the detector region.
+
 Outputs in `out_dir`:
 
 - `A/` and `B/` predicted 16-bit PNG patterns
@@ -60,6 +104,13 @@ Outputs in `out_dir`:
 - `monitoring/qual_grid_infer.png` and `monitoring/weights_hist.png`
 - `config_used.json` and `output.log` (if enabled)
 - `manifest.json` with run metadata, timing, and summary counts
+
+### Troubleshooting
+
+- **Shape mismatches**: ensure GT preprocessing matches `data.preprocess` (crop/mask/normalize).
+- **CUDA not available**: set `inference.device: cpu` or allow auto fallback.
+- **Empty output directories**: confirm `data.mixed_dir` contains files with the expected suffix and
+  `data.extensions` includes the file types you have.
 
 ## Real-data evaluation
 

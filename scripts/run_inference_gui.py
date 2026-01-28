@@ -284,11 +284,19 @@ class InferenceWorker(QThread):
             return
         metrics_csv = result.output_dir / "metrics.csv"
         metrics_json = result.output_dir / "metrics.json"
-        fieldnames = sorted(rows[0].keys())
+        fieldnames = []
+        for row in rows:
+            for key in row.keys():
+                if key not in fieldnames:
+                    fieldnames.append(key)
+        if "sample_id" in fieldnames:
+            fieldnames.remove("sample_id")
+            fieldnames.insert(0, "sample_id")
         with metrics_csv.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(rows)
+            for row in rows:
+                writer.writerow({key: row.get(key) for key in fieldnames})
         payload = {
             "summary": result.sample_metrics_summary,
             "samples": rows,

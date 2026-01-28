@@ -16,6 +16,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - Interactive mixing experiments notebook for exploring mixing strategies and parameters.
 - Demonstration notebook comparing raw mixing vs normalized mixing (non-physical raw case for illustration only).
 - Unit and smoke tests covering preprocessing, mixing, data generation, training, and inference.
+- Pattern Mixing Playground GUI for interactive A/B mixing, noise, and visualization.
 
 ## Current Status
 
@@ -30,6 +31,7 @@ Build a reproducible pipeline to generate synthetic mixed Kikuchi patterns (C) f
 - `scripts/generate_data.py`: generate synthetic datasets from pure patterns.
 - `scripts/run_train.py`: train the dual-output U-Net.
 - `scripts/run_infer.py`: run inference on mixed patterns.
+- `apps/pattern_mixer_gui/`: standalone GUI for mixing A/B patterns and exporting C.
 - `src/generation/`: mixing pipelines and dataset construction.
 - `src/preprocessing/`: 16-bit handling, masking, normalization, transforms.
 - `src/models/unet_dual.py`: baseline model architecture.

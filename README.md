@@ -200,6 +200,19 @@ linked 2×2 viewer, and exports `run_manifest.json` plus optional metrics files 
 See [`docs/gui_inference.md`](docs/gui_inference.md) for full usage instructions and config
 precedence details.
 
+### Pattern Mixing Playground GUI
+
+Launch the interactive mixing sandbox with:
+
+```bash
+python -m apps.pattern_mixer_gui
+```
+
+This GUI lets you load two patterns (A/B), explore multiple mixing/normalization strategies,
+apply per-image noise models, and export the mixed C as a 16-bit PNG. It features image-first
+viewers with zoom/pan, fit/1:1, and per-viewer contrast controls. See
+[`apps/pattern_mixer_gui/README.md`](apps/pattern_mixer_gui/README.md) for detailed usage.
+
 Evaluate on real mixed patterns (with masked metrics and qualitative grids) via:
 
 ```bash

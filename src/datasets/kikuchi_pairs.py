@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, random_split
+from torch.utils.data import Dataset, Subset
 import csv
 
 from src.preprocessing.mask import build_mask_with_metadata
@@ -80,17 +80,94 @@ def split_dataset(
     dataset: Dataset,
     val_split: float,
     seed: int,
-) -> Tuple[Dataset, Optional[Dataset]]:
+    force_val_ids: Optional[Sequence[str]] = None,
+    return_info: bool = False,
+) -> Tuple[Dataset, Optional[Dataset]] | Tuple[Dataset, Optional[Dataset], Dict[str, Any]]:
+    """Split a dataset into train/val subsets with optional forced validation IDs.
+
+    Parameters
+    ----------
+    dataset:
+        Dataset instance with a ``sample_ids`` attribute.
+    val_split:
+        Fraction of samples to assign to validation.
+    seed:
+        RNG seed for deterministic splitting.
+    force_val_ids:
+        Optional sequence of sample IDs that must be in the validation set.
+    return_info:
+        When True, return a dict with split metadata.
+    """
     if not 0.0 <= val_split < 1.0:
         raise ValueError("val_split must be in [0, 1).")
-    if val_split == 0.0:
-        return dataset, None
-    val_size = int(len(dataset) * val_split)
-    train_size = len(dataset) - val_size
+
+    total = len(dataset)
+    sample_ids = getattr(dataset, "sample_ids", None)
+    if sample_ids is None:
+        raise ValueError("Dataset must expose sample_ids for deterministic splitting.")
+
+    forced_ids = list(dict.fromkeys(force_val_ids or []))
+    id_to_idx = {sample_id: idx for idx, sample_id in enumerate(sample_ids)}
+    forced_indices = [id_to_idx[sid] for sid in forced_ids if sid in id_to_idx]
+    missing_forced = [sid for sid in forced_ids if sid not in id_to_idx]
+
+    base_val_size = int(total * val_split)
+    if val_split > 0.0 and total > 0:
+        base_val_size = max(1, base_val_size)
+    if forced_ids and total > 0:
+        base_val_size = max(1, base_val_size)
+    val_size = max(base_val_size, len(forced_indices))
+    val_size = min(val_size, total)
+
+    info: Dict[str, Any] = {
+        "seed": int(seed),
+        "val_split": float(val_split),
+        "total_samples": total,
+        "requested_val_sample_ids": forced_ids,
+        "missing_val_sample_ids": missing_forced,
+    }
+
     if val_size == 0:
-        return dataset, None
-    generator = torch.Generator().manual_seed(seed)
-    return random_split(dataset, [train_size, val_size], generator=generator)
+        train_set = dataset
+        val_set = None
+        if return_info:
+            info.update(
+                {
+                    "train_indices": list(range(total)),
+                    "val_indices": [],
+                    "train_sample_ids": list(sample_ids),
+                    "val_sample_ids": [],
+                }
+            )
+            return train_set, val_set, info
+        return train_set, val_set
+
+    forced_index_set = set(forced_indices)
+    remaining_indices = [idx for idx in range(total) if idx not in forced_index_set]
+    extra_count = max(val_size - len(forced_indices), 0)
+    extra_indices: list[int] = []
+    if extra_count:
+        rng = np.random.default_rng(seed)
+        extra_indices = rng.choice(remaining_indices, size=extra_count, replace=False).tolist()
+
+    val_indices = sorted(set(forced_indices + extra_indices))
+    val_index_set = set(val_indices)
+    train_indices = [idx for idx in range(total) if idx not in val_index_set]
+
+    train_set = Subset(dataset, train_indices)
+    val_set = Subset(dataset, val_indices) if val_indices else None
+
+    if return_info:
+        info.update(
+            {
+                "train_indices": train_indices,
+                "val_indices": val_indices,
+                "train_sample_ids": [sample_ids[idx] for idx in train_indices],
+                "val_sample_ids": [sample_ids[idx] for idx in val_indices],
+            }
+        )
+        return train_set, val_set, info
+    return train_set, val_set
 
 
 class KikuchiPairDataset(Dataset):

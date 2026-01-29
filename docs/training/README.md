@@ -117,9 +117,9 @@ train:
 - `logging.image_log.enabled`: `true` to write sample images + HTML report.
 - `logging.image_log.interval`: log every N epochs (e.g., `1` for debug, `5` for regular runs).
 - `logging.image_log.max_samples`: how many samples to log per epoch (typical `1–4`).
-- `logging.image_log.sample_strategy`: `fixed` (deterministic), `first`, or `random` (new each interval).
-- `logging.image_log.sample_ids`: optional fixed list of sample IDs to track over time (recommended for a consistent A/B prediction example in the report). Defaults to `sample_000000` for synthetic datasets; if not found, logging falls back to the configured strategy.
-- `logging.image_log.split`: `val` (default) or `train` source split.
+- `logging.image_log.sample_strategy`: `fixed` (deterministic), `first`, or `random` (new each interval). Only applies when `sample_ids` is empty.
+- `logging.image_log.sample_ids`: optional fixed list of sample IDs to track over time. **These IDs are forced into the validation split** and used as the validation reference for metrics/logging/visuals. If none of the IDs exist, the first validation sample is used as a deterministic fallback.
+- `logging.image_log.split`: validation-only for leakage safety; any `train` setting is overridden to `val`.
 - `logging.image_log.output_dir`: `null` uses `<out_dir>/monitoring`; otherwise set a subfolder.
 - `logging.image_log.image_format`: `png` (recommended).
 - `logging.image_log.include_recon`: when `true`, logs `C_hat = x_hat*A_pred + y_hat*B_pred`.
@@ -163,6 +163,7 @@ In `out_dir`:
 - `monitoring/metrics_curve.png`: optional PSNR/SSIM/reconstruction curves
 - `monitoring/qual_grid_latest.png`: latest qualitative grid (C, A/B gt, A/B pred, C_hat)
 - `monitoring/weights_scatter.png`: optional x_hat vs x_true scatter
+- `split.json`: train/val membership lists + validation reference sample (audit/reproducibility)
 - `config_used.json`: resolved config snapshot for reproducibility
 - `resolved_config.yaml`: resolved YAML configuration after applying CLI overrides
 - `output.log`: file logs (if `logging.log_to_file: true`)

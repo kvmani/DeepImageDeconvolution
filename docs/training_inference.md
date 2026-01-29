@@ -27,8 +27,15 @@ Outputs in `out_dir`:
 - `config_used.json` with the resolved configuration
 - `output.log` (if `logging.log_to_file: true`)
 - `manifest.json` with run metadata, timing, and summary counts
+- `split.json` with train/val membership lists and validation reference sample
 - `monitoring/loss_curve.png`, `monitoring/qual_grid_latest.png`, and optional metrics/weights plots
  - `monitoring/image_log.json` and `monitoring/index.html` when image logging is enabled (used for consistent A/B prediction tracking)
+
+Validation split behavior:
+
+- `logging.image_log.sample_ids` (if provided) are **forced into the validation set** and used as the fixed reference for validation visuals/logs.
+- If none of the requested IDs exist, the **first validation sample** becomes the deterministic fallback reference.
+- `split.json` records the full train/val membership for auditability and exact reproducibility.
 
 ### Expected tensor shapes (256x256 input)
 

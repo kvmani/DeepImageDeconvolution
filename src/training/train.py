@@ -127,26 +127,34 @@ def _select_log_indices(
     if cfg.sample_ids:
         if state.indices is None:
             selected: List[int] = []
+            found_ids: set[str] = set()
+            requested = list(cfg.sample_ids)
             for idx in range(len(dataset)):
                 sample_id = dataset[idx]["sample_id"]
                 if sample_id in cfg.sample_ids:
                     selected.append(idx)
+                    found_ids.add(sample_id)
                     if len(selected) >= cfg.max_samples:
                         break
+            missing = [sid for sid in requested if sid not in found_ids]
             if selected:
                 state.indices = selected
-                return state.indices
-            logger.warning(
-                "No matching sample_ids found for image logging; falling back to %s strategy.",
-                cfg.sample_strategy,
-            )
-            state.indices = []
-        if state.indices:
-            return state.indices
+                if missing:
+                    logger.warning(
+                        "Some requested sample_ids were not found in the logging split: %s",
+                        ", ".join(missing),
+                    )
+            else:
+                logger.warning(
+                    "No matching sample_ids found for image logging; requested=%s; using first validation sample.",
+                    ", ".join(requested),
+                )
+                state.indices = [0] if len(dataset) > 0 else []
+        return state.indices
 
     strategy = cfg.sample_strategy
     if strategy in ("fixed", "first"):
-        if state.indices is None:
+        if not state.indices:
             count = min(cfg.max_samples, len(dataset))
             if strategy == "first":
                 state.indices = list(range(count))
@@ -222,6 +230,7 @@ def _render_qual_grid(
     device: torch.device,
     out_png: Path,
     logger,
+    sample_index: Optional[int] = None,
 ) -> bool:
     """Render the latest qualitative grid from a fixed sample.
 
@@ -246,7 +255,11 @@ def _render_qual_grid(
     if len(dataset) == 0:
         logger.warning("Qual grid skipped: dataset is empty.")
         return False
-    sample = dataset[0]
+    index = sample_index if sample_index is not None else 0
+    if index < 0 or index >= len(dataset):
+        logger.warning("Qual grid index %s out of range; falling back to 0.", index)
+        index = 0
+    sample = dataset[index]
     c = sample["C"].unsqueeze(0).to(device)
     a = sample["A"].unsqueeze(0).to(device)
     b = sample["B"].unsqueeze(0).to(device)
@@ -436,6 +449,30 @@ def _tracking_sample_from_entry(
     return tracking
 
 
+def _collect_split_records(
+    sample_ids: List[str],
+    dataset: Any,
+    repo_root: Path,
+) -> List[Dict[str, str]]:
+    records: List[Dict[str, str]] = []
+    a_map = getattr(dataset, "a_map", {})
+    b_map = getattr(dataset, "b_map", {})
+    c_map = getattr(dataset, "c_map", {})
+    for sample_id in sample_ids:
+        record = {"sample_id": sample_id}
+        path_a = a_map.get(sample_id)
+        path_b = b_map.get(sample_id)
+        path_c = c_map.get(sample_id)
+        if path_a is not None:
+            record["A"] = safe_relpath(Path(path_a), repo_root)
+        if path_b is not None:
+            record["B"] = safe_relpath(Path(path_b), repo_root)
+        if path_c is not None:
+            record["C"] = safe_relpath(Path(path_c), repo_root)
+        records.append(record)
+    return records
+
+
 def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     """Train the model using the provided configuration."""
     log_level_name = str(config.get("logging", {}).get("log_level", "INFO")).upper()
@@ -495,6 +532,15 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
     require_weights = bool(data_cfg.get("require_weights", True))
     weight_tolerance = float(data_cfg.get("weight_tolerance", 1e-3))
 
+    image_log_cfg = _parse_image_log_config(logging_cfg, out_dir, seed)
+    if not mask_enabled and image_log_cfg.mask_metrics:
+        image_log_cfg = replace(image_log_cfg, mask_metrics=False)
+    if image_log_cfg.sample_ids:
+        logger.info(
+            "Validation split will force requested image_log.sample_ids into validation: %s",
+            ", ".join(image_log_cfg.sample_ids),
+        )
+
     sample_limit = debug_cfg.get("sample_limit") if debug_enabled else None
     dataset = KikuchiPairDataset(
         root_dir=root_dir,
@@ -509,7 +555,84 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
         require_weights=require_weights,
         weight_tolerance=weight_tolerance,
     )
-    train_set, val_set = split_dataset(dataset, val_split, seed)
+    split_info: Dict[str, Any] = {}
+    train_set, val_set, split_info = split_dataset(
+        dataset,
+        val_split,
+        seed,
+        force_val_ids=image_log_cfg.sample_ids,
+        return_info=True,
+    )
+
+    val_sample_ids = split_info.get("val_sample_ids", [])
+    train_sample_ids = split_info.get("train_sample_ids", [])
+    requested_val_ids = split_info.get("requested_val_sample_ids", [])
+    missing_val_ids = split_info.get("missing_val_sample_ids", [])
+    resolved_val_ids = [sid for sid in requested_val_ids if sid in set(val_sample_ids)]
+    if requested_val_ids:
+        if missing_val_ids:
+            logger.warning(
+                "Requested validation sample_ids not found in dataset: %s",
+                ", ".join(missing_val_ids),
+            )
+        if not resolved_val_ids and val_sample_ids:
+            resolved_val_ids = [val_sample_ids[0]]
+            logger.warning(
+                "No requested validation sample_ids matched; using first validation sample %s.",
+                resolved_val_ids[0],
+            )
+    if resolved_val_ids and len(resolved_val_ids) > image_log_cfg.max_samples:
+        logger.warning(
+            "Truncating resolved validation sample_ids to max_samples=%d.",
+            image_log_cfg.max_samples,
+        )
+        resolved_val_ids = resolved_val_ids[: image_log_cfg.max_samples]
+    if requested_val_ids:
+        image_log_cfg = replace(image_log_cfg, sample_ids=resolved_val_ids)
+
+    val_reference_id = None
+    if resolved_val_ids:
+        val_reference_id = resolved_val_ids[0]
+    elif val_sample_ids:
+        val_reference_id = val_sample_ids[0]
+
+    val_reference_index = None
+    if val_reference_id and val_sample_ids:
+        try:
+            val_reference_index = val_sample_ids.index(val_reference_id)
+        except ValueError:
+            val_reference_index = None
+
+    split_info["resolved_val_sample_ids"] = resolved_val_ids
+    split_info["val_reference_sample_id"] = val_reference_id
+
+    if image_log_cfg.enabled and image_log_cfg.split != "val":
+        logger.warning(
+            "Image logging split '%s' overridden to 'val' to avoid leakage.",
+            image_log_cfg.split,
+        )
+        image_log_cfg = replace(image_log_cfg, split="val")
+
+    split_payload = {
+        "seed": split_info.get("seed"),
+        "val_split": split_info.get("val_split"),
+        "total_samples": split_info.get("total_samples"),
+        "requested_val_sample_ids": requested_val_ids,
+        "missing_val_sample_ids": missing_val_ids,
+        "resolved_val_sample_ids": resolved_val_ids,
+        "val_reference_sample_id": val_reference_id,
+        "train_samples": _collect_split_records(train_sample_ids, dataset, repo_root),
+        "val_samples": _collect_split_records(val_sample_ids, dataset, repo_root),
+    }
+    split_path = out_dir / "split.json"
+    split_path.write_text(json.dumps(split_payload, indent=2))
+    split_relpath = safe_relpath(split_path, repo_root)
+    logger.info(
+        "Dataset split: train=%d val=%d (val reference=%s)",
+        len(train_sample_ids),
+        len(val_sample_ids),
+        val_reference_id or "none",
+    )
 
     batch_size = int(train_cfg.get("batch_size", 4))
     epochs = int(train_cfg.get("epochs", 1))
@@ -585,9 +708,6 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
         best_val = float(checkpoint.get("metrics", {}).get("val_loss", best_val))
         logger.info("Resumed training from %s (epoch %d)", resume_path, start_epoch)
 
-    image_log_cfg = _parse_image_log_config(logging_cfg, out_dir, seed)
-    if not mask_enabled and image_log_cfg.mask_metrics:
-        image_log_cfg = replace(image_log_cfg, mask_metrics=False)
     image_log_state = ImageLogState()
     if image_log_cfg.enabled:
         image_log_cfg.output_dir.mkdir(parents=True, exist_ok=True)
@@ -618,6 +738,8 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
             "history": safe_relpath(history_path, repo_root),
             "metrics_csv": safe_relpath(history_csv_path, repo_root),
         }
+        if split_relpath:
+            report_artifacts["split"] = split_relpath
         if best_path is not None:
             report_artifacts["best_ckpt"] = safe_relpath(best_path, repo_root)
         if image_log_relpath:
@@ -706,11 +828,20 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
             write_metrics_csv(history, history_csv_path)
             plot_loss_curves(history, loss_curve_path)
             plot_metrics_curves(history, metrics_curve_path)
-            qual_dataset = val_set if val_set is not None else train_set
-            try:
-                _render_qual_grid(model, qual_dataset, device, qual_grid_path, logger)
-            except Exception as exc:
-                logger.warning("Qual grid update failed: %s", exc)
+            if val_set is None:
+                logger.warning("Qual grid skipped: no validation set available.")
+            else:
+                try:
+                    _render_qual_grid(
+                        model,
+                        val_set,
+                        device,
+                        qual_grid_path,
+                        logger,
+                        sample_index=val_reference_index,
+                    )
+                except Exception as exc:
+                    logger.warning("Qual grid update failed: %s", exc)
 
             global_step += len(train_loader)
 
@@ -759,48 +890,46 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
             if image_log_cfg.enabled and epoch % image_log_cfg.interval == 0:
-                log_dataset = train_set
-                if image_log_cfg.split == "val" and val_set is not None:
-                    log_dataset = val_set
-                elif image_log_cfg.split == "val" and val_set is None:
-                    logger.warning(
-                        "Image logging requested for val split, but no val set exists; using train."
-                    )
-                try:
-                    entry = _log_epoch_images(
-                        model,
-                        log_dataset,
-                        image_log_cfg,
-                        image_log_state,
-                        device,
-                        epoch,
-                        logger,
-                        history,
-                    )
-                    if entry:
-                        tracking_sample = _tracking_sample_from_entry(entry, image_log_cfg, repo_root)
-                        image_log_relpath = safe_relpath(
-                            image_log_cfg.output_dir / "image_log.json", repo_root
+                if val_set is None:
+                    logger.warning("Image logging skipped: no validation set available.")
+                else:
+                    try:
+                        entry = _log_epoch_images(
+                            model,
+                            val_set,
+                            image_log_cfg,
+                            image_log_state,
+                            device,
+                            epoch,
+                            logger,
+                            history,
                         )
-                        if image_log_cfg.write_html:
-                            image_log_html_relpath = safe_relpath(
-                                image_log_cfg.output_dir / "index.html", repo_root
+                        if entry:
+                            tracking_sample = _tracking_sample_from_entry(entry, image_log_cfg, repo_root)
+                            image_log_relpath = safe_relpath(
+                                image_log_cfg.output_dir / "image_log.json", repo_root
                             )
-                except Exception as exc:
-                    logger.error("Image logging failed: %s", exc)
+                            if image_log_cfg.write_html:
+                                image_log_html_relpath = safe_relpath(
+                                    image_log_cfg.output_dir / "index.html", repo_root
+                                )
+                    except Exception as exc:
+                        logger.error("Image logging failed: %s", exc)
 
             last_metrics = metrics
             last_epoch = epoch
             _write_report(metrics, report_status, epoch, tracking_sample)
 
         report_status = "complete"
-        weights_loader = val_loader if val_loader is not None else train_loader
-        try:
-            x_true, x_hat = _collect_weight_pairs(model, weights_loader, device)
-            if plot_weights_scatter(x_true, x_hat, weights_plot_path):
-                logger.info("Weights plot saved to %s", weights_plot_path)
-        except Exception as exc:
-            logger.warning("Weights plot update failed: %s", exc)
+        if val_loader is None:
+            logger.warning("Weights plot skipped: no validation set available.")
+        else:
+            try:
+                x_true, x_hat = _collect_weight_pairs(model, val_loader, device)
+                if plot_weights_scatter(x_true, x_hat, weights_plot_path):
+                    logger.info("Weights plot saved to %s", weights_plot_path)
+            except Exception as exc:
+                logger.warning("Weights plot update failed: %s", exc)
     except KeyboardInterrupt:
         report_status = "interrupted"
         logger.warning("Training interrupted by user.")
@@ -823,4 +952,6 @@ def train_model(config: Dict[str, Any]) -> Dict[str, Any]:
         "epochs": epochs,
         "best_val": best_val,
         "output_dir": str(out_dir),
+        "split_path": str(split_path),
+        "val_reference_sample_id": val_reference_id,
     }

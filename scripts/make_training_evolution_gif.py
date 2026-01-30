@@ -232,6 +232,7 @@ def _draw_plot(
     current_epoch: int,
     plots_cfg: Dict[str, Any],
     style_cfg: Dict[str, Any],
+    axis_limits: Dict[str, float],
 ) -> None:
     show_history = plots_cfg.get("show_history", "up_to_epoch")
     max_epoch = None if show_history == "full" else current_epoch
@@ -312,6 +313,14 @@ def _draw_plot(
     ax.tick_params(which="both", direction="out")
     if any_data:
         ax.legend(frameon=False, loc="best")
+    x_min = axis_limits.get("x_min")
+    x_max = axis_limits.get("x_max")
+    y_min = axis_limits.get("y_min")
+    y_max = axis_limits.get("y_max")
+    if x_min is not None and x_max is not None:
+        ax.set_xlim(x_min, x_max)
+    if y_min is not None and y_max is not None:
+        ax.set_ylim(y_min, y_max)
 
 
 def _load_image(path: Path) -> np.ndarray:
@@ -328,6 +337,7 @@ def build_frame(
     history_by_epoch: Dict[int, Dict[str, Any]],
     config: Dict[str, Any],
     image_log_dir: Path,
+    plot_limits: List[Dict[str, float]],
 ) -> Image.Image:
     layout_cfg = config.get("layout", {})
     style_cfg = config.get("style", {})
@@ -396,6 +406,7 @@ def build_frame(
             current_epoch=int(history_epoch) if history_epoch is not None else 0,
             plots_cfg=plots_cfg,
             style_cfg=style_cfg,
+            axis_limits=plot_limits[plot_idx] if plot_idx < len(plot_limits) else {},
         )
 
     margins = layout_cfg.get("margins", {})
@@ -431,12 +442,46 @@ def build_frame(
             )
 
     fig.canvas.draw()
-    width, height = fig.canvas.get_width_height()
-    buffer = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    buffer = buffer.reshape(height, width, 3)
-    frame = Image.fromarray(buffer)
+    rgba = np.asarray(fig.canvas.buffer_rgba())
+    rgb = rgba[..., :3]
+    frame = Image.fromarray(rgb, mode="RGB")
     plt.close(fig)
     return frame
+
+
+def _compute_plot_limits(
+    history: List[Dict[str, Any]],
+    plots_cfg: Dict[str, Any],
+) -> List[Dict[str, float]]:
+    epochs = [_coerce_number(row.get("epoch")) for row in history]
+    epochs = [int(e) for e in epochs if e is not None]
+    x_min = min(epochs) if epochs else 0
+    x_max = max(epochs) if epochs else 1
+
+    limits: List[Dict[str, float]] = []
+    for plot_cfg in plots_cfg.get("items", []):
+        values: List[float] = []
+        for series in plot_cfg.get("series", []):
+            key = series.get("key")
+            if not key:
+                continue
+            for row in history:
+                value = _coerce_number(row.get(key))
+                if value is not None:
+                    values.append(value)
+        if values:
+            y_min = min(values)
+            y_max = max(values)
+        else:
+            y_min, y_max = 0.0, 1.0
+        if y_min == y_max:
+            pad = 1e-6 if y_min == 0 else abs(y_min) * 0.01
+            if pad == 0:
+                pad = 1.0
+            y_min -= pad
+            y_max += pad
+        limits.append({"x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max})
+    return limits
 
 
 def main() -> None:
@@ -489,6 +534,7 @@ def main() -> None:
         key=lambda item: item.get("epoch", 0),
     )
     history_by_epoch = {int(row["epoch"]): row for row in history_sorted}
+    plot_limits = _compute_plot_limits(history_sorted, config.get("plots", {}))
 
     sample_id = _resolve_sample_id(
         entries_sorted,
@@ -519,6 +565,7 @@ def main() -> None:
             history_by_epoch=history_by_epoch,
             config=config,
             image_log_dir=image_log_dir,
+            plot_limits=plot_limits,
         )
         if output_cfg.get("save_frames", False):
             frame_dir = _as_path(output_cfg.get("frame_dir", "monitoring/frames"), run_dir)

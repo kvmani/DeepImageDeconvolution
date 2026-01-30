@@ -30,6 +30,7 @@ Outputs in `out_dir`:
 - `split.json` with train/val membership lists and validation reference sample
 - `monitoring/loss_curve.png`, `monitoring/qual_grid_latest.png`, and optional metrics/weights plots
  - `monitoring/image_log.json` and `monitoring/index.html` when image logging is enabled (used for consistent A/B prediction tracking)
+- `monitoring/training_evolution.gif` when built via `scripts/make_training_evolution_gif.py`
 
 Validation split behavior:
 

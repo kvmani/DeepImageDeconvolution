@@ -163,6 +163,7 @@ In `out_dir`:
 - `monitoring/metrics_curve.png`: optional PSNR/SSIM/reconstruction curves
 - `monitoring/qual_grid_latest.png`: latest qualitative grid (C, A/B gt, A/B pred, C_hat)
 - `monitoring/weights_scatter.png`: optional x_hat vs x_true scatter
+- `monitoring/training_evolution.gif`: optional animated GIF (per-epoch images + metric curves) built by `scripts/make_training_evolution_gif.py`
 - `split.json`: train/val membership lists + validation reference sample (audit/reproducibility)
 - `config_used.json`: resolved config snapshot for reproducibility
 - `resolved_config.yaml`: resolved YAML configuration after applying CLI overrides
@@ -170,6 +171,23 @@ In `out_dir`:
 - `manifest.json`: run metadata, timing, and summary counts
 
 Open `monitoring/index.html` in a browser to review training progress visually.
+
+## Training evolution GIF (optional)
+
+Generate a compact, scientific-grade GIF that animates the tracked validation sample across epochs and overlays a 2x2 grid of curves (Loss, SSIM, PSNR, L1/L2). The layout, fonts, colors, line styles, and minor ticks are configurable in YAML.
+
+```bash
+python3 scripts/make_training_evolution_gif.py \
+  --config configs/training_evolution_gif.yaml \
+  --run_dir outputs/train_run_baseline
+```
+
+Key configuration knobs live in `configs/training_evolution_gif.yaml`:
+
+- `run_dir`: training output directory containing `history.json` and `monitoring/image_log.json`
+- `sample.id`: sample ID to track (leave null to use the first logged sample)
+- `layout.header.fields`: which metrics appear in the compact header line
+- `plots.items`: series definitions for the 2x2 plot grid
 
 ## Comparing runs
 

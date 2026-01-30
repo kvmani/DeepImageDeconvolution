@@ -1,0 +1,113 @@
+# GIF animation config for visualizing training evolution over epochs.
+run_dir: outputs/train_run
+
+input:
+  # Paths are resolved relative to run_dir unless absolute.
+  image_log: monitoring/image_log.json
+  history: history.json
+
+output:
+  # Output GIF path (relative to run_dir unless absolute).
+  gif: monitoring/training_evolution.gif
+  fps: 2
+  loop: 0
+  dpi: 150
+  save_frames: false
+  frame_dir: monitoring/frames
+
+sample:
+  # Fixed sample_id to track. If null, uses sample_index from the first epoch entry.
+  id: null
+  index: 0
+  missing_policy: skip  # skip or error when a sample is missing in an epoch
+
+layout:
+  figure_size: [13.5, 8.0]
+  image_order: ["C", "A_gt", "B_gt", "A_pred", "B_pred", "C_hat"]
+  image_title_size: 10
+  image_title_pad: 4
+  image_wspace: 0.06
+  plot_hspace: 0.28
+  plot_wspace: 0.22
+  image_row_ratio: 1.15
+  plot_row_ratio: 1.0
+  margins:
+    left: 0.04
+    right: 0.985
+    bottom: 0.05
+    top: 0.92
+  header:
+    enabled: true
+    font_size: 12
+    weight: semibold
+    separator: " | "
+    skip_missing: true
+    fields:
+      - {label: "Epoch", key: "epoch"}
+      - {label: "Split", key: "split"}
+      - {label: "Sample", key: "sample_id"}
+      - {label: "PSNR A", key: "psnr_a", format: ".2f"}
+      - {label: "PSNR B", key: "psnr_b", format: ".2f"}
+      - {label: "SSIM A", key: "ssim_a", format: ".3f"}
+      - {label: "SSIM B", key: "ssim_b", format: ".3f"}
+      - {label: "L1 recon", key: "l1_recon", format: ".4f"}
+      - {label: "L2 recon", key: "l2_recon", format: ".4f"}
+
+style:
+  font_family: DejaVu Sans
+  base_font_size: 10
+  title_size: 11
+  label_size: 9
+  tick_size: 8
+  legend_size: 8
+  line_width: 1.6
+  axis_line_width: 0.8
+  figure_facecolor: "#ffffff"
+  axes_facecolor: "#ffffff"
+  grid:
+    major_alpha: 0.35
+    minor_alpha: 0.15
+    major_linewidth: 0.7
+    minor_linewidth: 0.5
+
+plots:
+  grid: [2, 2]
+  show_history: up_to_epoch  # up_to_epoch or full
+  highlight_epoch: true
+  highlight:
+    color: "#111111"
+    linestyle: ":"
+    linewidth: 1.0
+    alpha: 0.6
+  marker:
+    size: 24
+    alpha: 0.9
+  x_label: "Epoch"
+  items:
+    - title: "Loss"
+      y_label: "Loss"
+      series:
+        - {key: "train_loss", label: "train", color: "#1f77b4"}
+        - {key: "val_loss", label: "val", color: "#ff7f0e"}
+    - title: "SSIM"
+      y_label: "SSIM"
+      series:
+        - {key: "ssim_a", label: "A", color: "#2ca02c"}
+        - {key: "ssim_b", label: "B", color: "#d62728"}
+        - {key: "ssim_a_masked", label: "A masked", color: "#9467bd", linestyle: "--"}
+        - {key: "ssim_b_masked", label: "B masked", color: "#8c564b", linestyle: "--"}
+    - title: "PSNR (dB)"
+      y_label: "PSNR"
+      series:
+        - {key: "psnr_a", label: "A", color: "#17becf"}
+        - {key: "psnr_b", label: "B", color: "#bcbd22"}
+        - {key: "psnr_a_masked", label: "A masked", color: "#1f77b4", linestyle: "--"}
+        - {key: "psnr_b_masked", label: "B masked", color: "#ff7f0e", linestyle: "--"}
+    - title: "L1/L2"
+      y_label: "Error"
+      series:
+        - {key: "val_l_ab", label: "L1 A/B (val)", color: "#7f7f7f"}
+        - {key: "val_l_recon", label: "L1 recon (val)", color: "#2ca02c"}
+        - {key: "l2_a", label: "L2 A", color: "#d62728"}
+        - {key: "l2_b", label: "L2 B", color: "#9467bd"}
+        - {key: "l2_recon", label: "L2 recon", color: "#8c564b"}

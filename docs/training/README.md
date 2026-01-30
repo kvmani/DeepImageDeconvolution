@@ -189,6 +189,29 @@ Key configuration knobs live in `configs/training_evolution_gif.yaml`:
 - `layout.header.fields`: which metrics appear in the compact header line
 - `plots.items`: series definitions for the 2x2 plot grid
 
+## End-to-end workflow script
+
+Use the full workflow runner to go from raw images → prepared 16-bit PNGs → synthetic dataset → training, in one command.
+
+```bash
+python3 scripts/run_full_workflow.py \
+  --input-dir "data/raw/Double Pattern Data" \
+  --processed-dir "data/processed/Double Pattern Data" \
+  --synthetic-dir "data/synthetic/run_001" \
+  --train-out-dir "outputs/train_run_001" \
+  --set generate.data.num_samples=2000 \
+  --set train.train.epochs=50
+```
+
+All stage-level overrides use `--set` with a `prepare.`, `generate.`, or `train.` prefix. Examples:
+
+- `--set prepare.overwrite=true`
+- `--set generate.data.mix.pipeline=normalize_then_mix`
+- `--set train.train.batch_size=4`
+
+Default settings live in `configs/workflow_default.yaml` (which points to
+`configs/default.yaml` and `configs/train_default.yaml` for the generate/train stages).
+
 ## Comparing runs
 
 Use the comparison helper to tabulate metrics across multiple runs:

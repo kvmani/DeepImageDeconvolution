@@ -99,6 +99,7 @@ Features implemented now:
 - Baseline dual-output U-Net training and inference with physics-aware reconstruction and weight supervision.
 - Metrics (L1, L2, PSNR, SSIM) and HTML monitoring reports with per-epoch plots.
 - Animated training evolution GIF builder (per-epoch images + metric curves) via `scripts/make_training_evolution_gif.py`.
+- End-to-end workflow runner (prepare → generate → train) via `scripts/run_full_workflow.py`.
 - Automated run summaries (`report.json` + curated figures) with a Quarto slide builder.
 - Interactive mixing experiments notebook.
 

@@ -1,0 +1,25 @@
+# End-to-end workflow config: prepare -> generate -> train.
+prepare:
+  enabled: true
+  input_dir: data/raw/Double Pattern Data
+  output_dir: data/processed/Double Pattern Data
+  recursive_input: true
+  output_format: png
+  output_bit_depth: "16"
+  grayscale_method: luma
+  overwrite: false
+  sample_limit: null
+  manifest_path: null
+
+generate:
+  enabled: true
+  config: configs/default.yaml
+
+train:
+  enabled: true
+  config: configs/train_default.yaml
+
+logging:
+  log_level: INFO
+  log_file: null
+  quiet: false

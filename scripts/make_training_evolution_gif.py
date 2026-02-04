@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -40,6 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out_gif", type=str, default=None, help="Output GIF path override.")
     parser.add_argument("--sample-id", type=str, default=None, help="Sample ID to track.")
     parser.add_argument("--sample-index", type=int, default=None, help="Sample index fallback.")
+    parser.add_argument(
+        "--every",
+        type=int,
+        default=None,
+        help="Include every Nth epoch in the GIF (default: 1).",
+    )
     parser.add_argument(
         "--log-level",
         type=str,
@@ -83,6 +90,16 @@ def _coerce_number(value: Any) -> Optional[float]:
         if math.isfinite(value_f):
             return value_f
     return None
+
+
+def _sanitize_filename_component(value: Any) -> str:
+    text = str(value) if value is not None else ""
+    text = text.strip()
+    if not text:
+        return "sample"
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
+    sanitized = sanitized.strip("._-")
+    return sanitized or "sample"
 
 
 def load_history(path: Path) -> List[Dict[str, Any]]:
@@ -346,6 +363,7 @@ def build_frame(
     _apply_style(style_cfg)
 
     image_order = layout_cfg.get("image_order", [])
+    num_images = len(image_order)
     fig_size = layout_cfg.get("figure_size", [13.5, 8.0])
     image_row_ratio = layout_cfg.get("image_row_ratio", 1.0)
     plot_row_ratio = layout_cfg.get("plot_row_ratio", 1.0)
@@ -355,6 +373,21 @@ def build_frame(
 
     fig = plt.figure(figsize=(fig_size[0], fig_size[1]), dpi=config.get("output", {}).get("dpi", 150))
 
+    image_grid = layout_cfg.get("image_grid")
+    if image_grid:
+        try:
+            image_rows, image_cols = image_grid
+        except (TypeError, ValueError):
+            image_rows, image_cols = 1, max(num_images, 1)
+        else:
+            image_rows = max(int(image_rows), 1)
+            image_cols = max(int(image_cols), 1)
+    else:
+        image_rows, image_cols = 1, max(num_images, 1)
+
+    if num_images > image_rows * image_cols:
+        image_rows = int(math.ceil(num_images / image_cols))
+
     outer = GridSpec(
         nrows=2,
         ncols=1,
@@ -362,7 +395,9 @@ def build_frame(
         hspace=layout_cfg.get("plot_hspace", 0.28),
         figure=fig,
     )
-    image_gs = outer[0].subgridspec(1, max(len(image_order), 1), wspace=layout_cfg.get("image_wspace", 0.06))
+    image_wspace = layout_cfg.get("image_wspace", 0.06)
+    image_hspace = layout_cfg.get("image_hspace", image_wspace)
+    image_gs = outer[0].subgridspec(image_rows, image_cols, wspace=image_wspace, hspace=image_hspace)
     plots_gs = outer[1].subgridspec(
         plot_rows,
         plot_cols,
@@ -372,7 +407,11 @@ def build_frame(
 
     images = sample.get("images", {})
     for idx, label in enumerate(image_order):
-        ax = fig.add_subplot(image_gs[0, idx])
+        row = idx // image_cols
+        col = idx % image_cols
+        if row >= image_rows:
+            break
+        ax = fig.add_subplot(image_gs[row, col])
         rel_path = images.get(label)
         if rel_path:
             path = image_log_dir / rel_path
@@ -418,8 +457,25 @@ def build_frame(
     )
 
     header_cfg = layout_cfg.get("header", {})
+    epoch_title_cfg = layout_cfg.get("epoch_title", {})
+    epoch_title_enabled = bool(epoch_title_cfg.get("enabled", True))
+    epoch_value = _coerce_number(entry.get("epoch"))
+    epoch_int = int(epoch_value) if epoch_value is not None else None
+
+    if epoch_title_enabled and epoch_int is not None:
+        prefix = str(epoch_title_cfg.get("prefix", "Epoch =")).strip()
+        title_text = f"{prefix} {epoch_int}" if prefix else str(epoch_int)
+        fig.suptitle(
+            title_text,
+            fontsize=epoch_title_cfg.get("font_size", 16),
+            fontweight=epoch_title_cfg.get("weight", "semibold"),
+            y=epoch_title_cfg.get("y", 0.995),
+        )
+
     if header_cfg.get("enabled", True):
         header_fields = header_cfg.get("fields", [])
+        if epoch_title_enabled and epoch_title_cfg.get("hide_epoch_in_header", True):
+            header_fields = [field for field in header_fields if field.get("key") != "epoch"]
         context: Dict[str, Any] = {
             "epoch": entry.get("epoch"),
             "split": entry.get("split"),
@@ -434,12 +490,24 @@ def build_frame(
             skip_missing=header_cfg.get("skip_missing", True),
         )
         if header_text:
-            fig.suptitle(
-                header_text,
-                fontsize=header_cfg.get("font_size", 12),
-                fontweight=header_cfg.get("weight", "semibold"),
-                y=0.98,
-            )
+            if epoch_title_enabled:
+                header_y = header_cfg.get("y", 0.965)
+                fig.text(
+                    0.5,
+                    header_y,
+                    header_text,
+                    ha="center",
+                    va="top",
+                    fontsize=header_cfg.get("font_size", 12),
+                    fontweight=header_cfg.get("weight", "semibold"),
+                )
+            else:
+                fig.suptitle(
+                    header_text,
+                    fontsize=header_cfg.get("font_size", 12),
+                    fontweight=header_cfg.get("weight", "semibold"),
+                    y=header_cfg.get("y", 0.98),
+                )
 
     fig.canvas.draw()
     rgba = np.asarray(fig.canvas.buffer_rgba())
@@ -500,6 +568,8 @@ def main() -> None:
         overrides.setdefault("sample", {})["id"] = args.sample_id
     if args.sample_index is not None:
         overrides.setdefault("sample", {})["index"] = args.sample_index
+    if args.every is not None:
+        overrides.setdefault("output", {})["every"] = args.every
     if overrides:
         config = deep_update(config, overrides)
 
@@ -510,13 +580,12 @@ def main() -> None:
 
     image_log_path = _as_path(input_cfg.get("image_log", "monitoring/image_log.json"), run_dir)
     history_path = _as_path(input_cfg.get("history", "history.json"), run_dir)
-    output_gif_path = _as_path(output_cfg.get("gif", "monitoring/training_evolution.gif"), run_dir)
-    output_gif_path.parent.mkdir(parents=True, exist_ok=True)
+    output_gif_template = _as_path(output_cfg.get("gif", "monitoring/training_evolution.gif"), run_dir)
 
     logger.info("Using run_dir: %s", run_dir.resolve())
     logger.info("Image log: %s", image_log_path.resolve())
     logger.info("History: %s", history_path.resolve())
-    logger.info("Output GIF: %s", output_gif_path.resolve())
+    logger.info("Output GIF (template): %s", output_gif_template.resolve())
 
     entries = load_image_log(image_log_path)
     if not entries:
@@ -544,10 +613,32 @@ def main() -> None:
     missing_policy = str(sample_cfg.get("missing_policy", "skip")).lower()
     logger.info("Tracking sample_id: %s", sample_id)
 
+    raw_every = output_cfg.get("every", 1)
+    try:
+        every = int(raw_every)
+    except (TypeError, ValueError):
+        logger.warning("--every must be an integer; using 1 instead (got %r).", raw_every)
+        every = 1
+    if every <= 0:
+        logger.warning("--every must be >= 1; using 1 instead (got %r).", raw_every)
+        every = 1
+    if every != 1:
+        logger.info("Including every %d-th frame (stride).", every)
+
+    safe_sample_id = _sanitize_filename_component(sample_id)
+    output_gif_template = output_gif_template.with_suffix(".gif")
+    output_gif_path = output_gif_template.with_name(
+        f"{output_gif_template.stem}_{safe_sample_id}{output_gif_template.suffix}"
+    )
+    output_gif_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Output GIF: %s", output_gif_path.resolve())
+
     frames: List[Image.Image] = []
     image_log_dir = image_log_path.parent
 
-    for entry in entries_sorted:
+    for idx, entry in enumerate(entries_sorted):
+        if idx % every != 0:
+            continue
         epoch = entry.get("epoch")
         if epoch is None:
             continue

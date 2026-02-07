@@ -253,20 +253,21 @@ Outcome: a justified recommendation of default preprocessing + metric(s) + searc
 
 ---
 
-## 10) Proposed code scaffolding (future implementation, minimal intrusion)
+## 10) Implemented scaffolding (v1)
 
-This is the intended module layout once we begin implementation (kept separate from ML pipelines):
+The deterministic baseline is now implemented in this repository (kept separate from ML pipelines):
 
-- `src/deterministic_mixing_inversion/`
-  - `io.py` (load/save, manifests)
-  - `mixing.py` (mixture synthesis and \(\hat{C}(x)\))
-  - `preprocess.py` (mask/bg/standardize; reuse `src/preprocessing/` where possible)
-  - `metrics/` (L1/L2, SSIM, NCC, optional phase correlation, optional `kikuchipy` PC)
-  - `search.py` (grid search + refinement)
-  - `runner.py` (single experiment entry point)
-  - `reporting/` (JSONL/CSV curves, optional HTML report)
+- `src/deterministic_mixing_inversion/io.py` (candidate/mixed loading and pairing)
+- `src/deterministic_mixing_inversion/preprocess.py` (masking, background correction, standardization, DoG)
+- `src/deterministic_mixing_inversion/metrics.py` (L1/L2/NCC/SSIM scoring with mask support)
+- `src/deterministic_mixing_inversion/alignment.py` (phase-correlation translation + bounded rotation)
+- `src/deterministic_mixing_inversion/search.py` (coarse-to-fine and exhaustive-grid fraction search)
+- `src/deterministic_mixing_inversion/reporting.py` (JSONL/CSV/HTML/report updates)
+- `src/deterministic_mixing_inversion/runner.py` (batch orchestration)
+- `scripts/invert_mixing_fraction.py` (CLI entry point)
+- `configs/deterministic_inversion/inversion_default.yaml` and `configs/deterministic_inversion/inversion_debug.yaml`
 
-Thin scripts in `scripts/` orchestrate runs and must support `--debug`, `--log-level`, `--log-file`, `--quiet`, and run manifests (consistent with the rest of the repo).
+Script UX follows repository conventions (`--debug`, `--log-level`, `--log-file`, `--quiet`, manifests, periodic `report.json` updates).
 
 ## 10.1) “Don’t reinvent EBSD tooling” policy (emphatic)
 
@@ -285,7 +286,7 @@ Rationale: this baseline’s goal is **robustness and correctness**, not re-deri
 
 ## 11) Acceptance criteria (“done” for the baseline)
 
-Minimum acceptable milestone:
+Current status:
 
 1. One command can:
    - select (or accept paths for) \(A\), \(B\), \(C\),
@@ -301,6 +302,11 @@ Minimum acceptable milestone:
 Stretch goal (grain-boundary mapping):
 
 - produce an \(x(x,y)\) map over a region of an EBSD scan using candidate selection from interior patterns and report ambiguity zones.
+
+Implementation note:
+
+- Item (1) is implemented in v1.
+- Item (2) is now implemented via `scripts/summarize_metric_robustness.py` and `src/deterministic_mixing_inversion/benchmark.py`.
 
 ---
 
@@ -327,10 +333,15 @@ This section records the deliberate changes introduced to the original “mixing
 
 ---
 
-## 13) Open questions / constraints needed to finalize implementation details
+## 13) Confirmed implementation defaults (v1)
 
-Please confirm or decide the following before we turn this vision into code:
+The following values are now fixed in code/config defaults:
 
-1. **Translation window**: what maximum pixel shift should we allow in debug vs regular mode (e.g., ±5 px debug, ±15 px regular)?
-2. **Rotation step size**: what angular step should we use for the coarse rotation search (e.g., 0.5°), before optional local refinement?
-3. **Score aggregation**: when searching candidate pairs \((A_i, B_j)\), should we select winners per-metric independently, or define a single “default winner” policy (e.g., NCC primary, tie-break by residual energy)?
+1. **Background correction**: subtractive default; divisive optional.
+2. **Mask geometry**: centered circular mask.
+3. **Real mixed input set**: `data/raw/Double Pattern Data/50-50 Double Pattern/`.
+4. **Candidate convention**: `bcc` as A-type and `fcc` as B-type from `Good Pattern/`.
+5. **Alignment protocol**: fast two-stage alignment (estimate at primary \(x^\*\), then refine \(x\) with fixed alignment).
+6. **Translation bounds**: default max shift ±15 px, debug max shift ±5 px.
+7. **Rotation bounds**: default search ±2°, hard max ±5°, coarse step 0.5° (debug 1.0°), bicubic interpolation.
+8. **Pair winner policy**: primary metric decides winner (default NCC); tie-break by lower L2 score when primary scores match.

@@ -7,3 +7,10 @@ scipy>=1.10
 pytest>=7.4
 torch>=2.0
 PySide6>=6.6
+
+# Optional EBSD ecosystem packages for advanced deterministic baseline extensions
+# (kept optional to avoid forcing heavyweight installs in basic workflows):
+# kikuchipy>=0.11
+# hyperspy>=2.0
+# pyebsdindex>=0.3
+# diffpy.structure>=3.1

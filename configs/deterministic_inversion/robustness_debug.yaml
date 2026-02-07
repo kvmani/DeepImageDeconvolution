@@ -1,0 +1,73 @@
+# Debug config for deterministic synthetic robustness benchmark.
+data:
+  candidate_pool:
+    root_dir: data/raw/Double Pattern Data/Good Pattern
+    a_pattern: "(?i)bcc"
+    b_pattern: "(?i)fcc"
+    recursive: false
+    max_per_group: 2
+
+deterministic_inversion:
+  preprocess:
+    auto_crop_to_target: false
+    mask:
+      enabled: true
+      detect_existing: true
+      zero_tolerance: 0.0005
+      outside_zero_fraction: 0.98
+    background_correction:
+      enabled: true
+      mode: subtractive
+      sigma: 15.0
+      epsilon: 1.0e-6
+    standardize:
+      enabled: true
+      epsilon: 1.0e-6
+    dog:
+      enabled: false
+      sigma_low: 1.0
+      sigma_high: 3.0
+  metrics:
+    enabled: ["ncc", "l2", "l1"]
+    primary: ncc
+  search:
+    strategy: coarse_to_fine
+    grid_steps: [0.1, 0.02, 0.005]
+    refine_window_steps: 3
+    exhaustive_step: 0.005
+  alignment:
+    enabled: true
+    translation:
+      enabled: true
+      max_shift_px: 5
+    rotation:
+      enabled: true
+      search_range_deg: 2.0
+      hard_max_deg: 5.0
+      step_deg: 1.0
+    interpolation_order: 3
+
+synthetic_benchmark:
+  use_true_pair_only: true
+  max_candidate_pairs: 2
+  max_samples: 24
+  x_values: [0.1, 0.3, 0.5, 0.7, 0.9]
+  save_synthetic_images: true
+  save_synthetic_limit: 10
+  debug_max_nuisance_cases: 2
+  nuisance:
+    gain_levels: [1.0, 1.05]
+    offset_levels: [0.0]
+    noise_std_levels: [0.0, 0.01]
+    blur_sigma_levels: [0.0]
+    translation_x_levels: [0.0, 2.0]
+    translation_y_levels: [0.0]
+    rotation_deg_levels: [0.0, 2.0]
+
+output:
+  out_dir: outputs/deterministic_robustness_debug
+
+debug:
+  enabled: true
+  seed: 7
+

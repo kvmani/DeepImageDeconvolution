@@ -115,6 +115,7 @@ Quick links:
 - `docs/status.md` for the read-only snapshot of the codebase.
 - `docs/networks/dual_unet.md` for the baseline Dual U-Net architecture details.
 - `docs/deterministic_mixing_fraction_inversion.md` for the deterministic (non-ML) mixing-fraction inversion baseline vision.
+- `docs/deterministic_inversion_usage.md` for deterministic inversion CLI usage and outputs.
 - `todo_list.md` for the current work list.
 - `docs/roadmap.md` for long-term phases and deliverables.
 - `docs/references.md` for centralized literature citations.
@@ -189,6 +190,24 @@ python3 scripts/run_infer.py --config configs/infer_default.yaml --checkpoint ou
 ```
 
 Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.csv` with `x_hat`/`y_hat` per sample (when enabled).
+
+## Deterministic inversion baseline
+
+Run the non-ML deterministic inversion baseline with:
+
+```bash
+python3 scripts/invert_mixing_fraction.py --debug
+```
+
+Run the synthetic robustness benchmark (metric ranking by `x` recovery) with:
+
+```bash
+python3 scripts/summarize_metric_robustness.py --debug
+```
+
+Use `configs/deterministic_inversion/inversion_default.yaml` for full runs and `configs/deterministic_inversion/inversion_debug.yaml` for fast deterministic checks.
+The script writes `results.jsonl`, per-sample score curves, `report.json`, and 16-bit reconstructions under `output.out_dir`.
+Benchmark configs live at `configs/deterministic_inversion/robustness_default.yaml` and `configs/deterministic_inversion/robustness_debug.yaml`.
 
 ### Inference GUI
 

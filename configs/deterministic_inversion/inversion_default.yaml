@@ -1,0 +1,62 @@
+# Default config for deterministic (non-ML) mixing-fraction inversion.
+data:
+  mixed_dir: data/raw/Double Pattern Data/50-50 Double Pattern
+  mixed_recursive: false
+  candidate_pool:
+    root_dir: data/raw/Double Pattern Data/Good Pattern
+    a_pattern: "(?i)bcc"
+    b_pattern: "(?i)fcc"
+    recursive: false
+    max_per_group: null
+
+deterministic_inversion:
+  preprocess:
+    auto_crop_to_target: false
+    mask:
+      enabled: true
+      detect_existing: true
+      zero_tolerance: 0.0005
+      outside_zero_fraction: 0.98
+    background_correction:
+      enabled: true
+      mode: subtractive
+      sigma: 21.0
+      epsilon: 1.0e-6
+    standardize:
+      enabled: true
+      epsilon: 1.0e-6
+    dog:
+      enabled: false
+      sigma_low: 1.0
+      sigma_high: 3.0
+  metrics:
+    enabled: ["ncc", "ssim", "l2", "l1"]
+    primary: ncc
+  search:
+    strategy: coarse_to_fine
+    grid_steps: [0.05, 0.01, 0.002]
+    refine_window_steps: 4
+    exhaustive_step: 0.002
+  alignment:
+    enabled: true
+    translation:
+      enabled: true
+      max_shift_px: 15
+    rotation:
+      enabled: true
+      search_range_deg: 2.0
+      hard_max_deg: 5.0
+      step_deg: 0.5
+    interpolation_order: 3
+
+output:
+  out_dir: outputs/deterministic_inversion
+  save_curves: true
+  write_html_report: true
+
+debug:
+  enabled: false
+  seed: 42
+  sample_limit: null
+  max_pairs: null
+

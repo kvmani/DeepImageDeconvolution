@@ -114,6 +114,7 @@ Quick links:
 
 - `docs/status.md` for the read-only snapshot of the codebase.
 - `docs/networks/dual_unet.md` for the baseline Dual U-Net architecture details.
+- `docs/deterministic_mixing_fraction_inversion.md` for the deterministic (non-ML) mixing-fraction inversion baseline vision.
 - `todo_list.md` for the current work list.
 - `docs/roadmap.md` for long-term phases and deliverables.
 - `docs/references.md` for centralized literature citations.

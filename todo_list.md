@@ -23,6 +23,7 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Reporting: integrate run comparison table into summarize_results deck.
 - [ ] Data: expand inputs using `data/raw/Double Pattern Data` and document preprocessing assumptions.
 - [ ] Data: decide the default mixing pipeline and weight distribution for training, then sync configs/docs.
+- [ ] Baseline: implement deterministic mixing-fraction inversion + synthetic robustness benchmark (see `docs/deterministic_mixing_fraction_inversion.md`).
 - [x] Training: standardize experiment naming and output folder conventions for reproducibility.
 - [ ] Docs: add a short baseline-results section to `docs/training_inference.md`.
 - [x] Reporting: add lab meeting demo deck with reproducible mixing artifacts and report.json.

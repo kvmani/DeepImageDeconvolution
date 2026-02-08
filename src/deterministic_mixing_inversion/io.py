@@ -38,7 +38,7 @@ def _sanitize_id(path: Path) -> str:
     return path.stem.replace(" ", "_").replace("/", "_").replace("\\", "_")
 
 
-def _load_pattern(path: Path) -> PatternRecord:
+def load_pattern(path: Path) -> PatternRecord:
     uint16_image = read_image_16bit(path)
     float_image = to_float01(uint16_image).astype(np.float32)
     return PatternRecord(
@@ -92,7 +92,7 @@ def load_mixed_patterns(
     if sample_limit is not None and sample_limit > 0:
         mixed_paths = mixed_paths[:sample_limit]
     logger.info("Mixed inputs discovered: %d under %s", len(mixed_paths), mixed_dir)
-    return [_load_pattern(path) for path in mixed_paths]
+    return [load_pattern(path) for path in mixed_paths]
 
 
 def load_candidate_pools(
@@ -155,8 +155,8 @@ def load_candidate_pools(
         recursive,
         max_value,
     )
-    candidates_a = [_load_pattern(path) for path in a_paths]
-    candidates_b = [_load_pattern(path) for path in b_paths]
+    candidates_a = [load_pattern(path) for path in a_paths]
+    candidates_b = [load_pattern(path) for path in b_paths]
     return candidates_a, candidates_b
 
 
@@ -193,4 +193,3 @@ def build_pair_indices(
 def candidate_paths(records: Iterable[PatternRecord]) -> List[Path]:
     """Return source paths for a sequence of records."""
     return [record.path for record in records]
-

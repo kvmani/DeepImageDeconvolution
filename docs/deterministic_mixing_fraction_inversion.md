@@ -265,7 +265,8 @@ The deterministic baseline is now implemented in this repository (kept separate 
 - `src/deterministic_mixing_inversion/reporting.py` (JSONL/CSV/HTML/report updates)
 - `src/deterministic_mixing_inversion/runner.py` (batch orchestration)
 - `scripts/invert_mixing_fraction.py` (CLI entry point)
-- `configs/deterministic_inversion/inversion_default.yaml` and `configs/deterministic_inversion/inversion_debug.yaml`
+- `configs/deterministic_inversion/inversion_default.yaml` and `configs/deterministic_inversion/inversion_debug.yaml` (synthetic single-pair defaults)
+- `configs/deterministic_inversion/inversion_real_default.yaml` and `configs/deterministic_inversion/inversion_real_debug.yaml` (real mixed-pattern batch mode)
 
 Script UX follows repository conventions (`--debug`, `--log-level`, `--log-file`, `--quiet`, manifests, periodic `report.json` updates).
 
@@ -289,10 +290,10 @@ Rationale: this baseline’s goal is **robustness and correctness**, not re-deri
 Current status:
 
 1. One command can:
-   - select (or accept paths for) \(A\), \(B\), \(C\),
+   - accept paths for \(A\), \(B\) and synthesize \(C\) with known \(x_{\text{true}}\),
    - run preprocessing,
-   - estimate \(x^\*\) with at least NCC + L2,
-   - write: `results.jsonl`, score-vs-\(x\) curves, and reconstructed \(\hat{C}(x^\*)\).
+   - estimate \(x^\*\) per metric objective (e.g. optimize NCC vs optimize L1),
+   - write: `results.jsonl`, score-vs-\(x\) curves, reconstructions, and an HTML summary with images + per-metric tables.
 2. One command can generate a small synthetic benchmark and output:
    - metric ranking table under configured nuisances,
    - summary plots,
@@ -339,9 +340,10 @@ The following values are now fixed in code/config defaults:
 
 1. **Background correction**: subtractive default; divisive optional.
 2. **Mask geometry**: centered circular mask.
-3. **Real mixed input set**: `data/raw/Double Pattern Data/50-50 Double Pattern/`.
-4. **Candidate convention**: `bcc` as A-type and `fcc` as B-type from `Good Pattern/`.
-5. **Alignment protocol**: fast two-stage alignment (estimate at primary \(x^\*\), then refine \(x\) with fixed alignment).
-6. **Translation bounds**: default max shift ±15 px, debug max shift ±5 px.
-7. **Rotation bounds**: default search ±2°, hard max ±5°, coarse step 0.5° (debug 1.0°), bicubic interpolation.
-8. **Pair winner policy**: primary metric decides winner (default NCC); tie-break by lower L2 score when primary scores match.
+3. **Synthetic default A/B inputs**: `Perfect_BCC-1.bmp` and `Perfect_FCC-1.bmp` from `Good Pattern/` (config-controlled).
+4. **Real mixed input set (batch configs)**: `data/raw/Double Pattern Data/50-50 Double Pattern/`.
+5. **Candidate convention (batch configs)**: `bcc` as A-type and `fcc` as B-type from `Good Pattern/`.
+6. **Alignment protocol**: fast two-stage alignment (estimate at primary \(x^\*\), then refine \(x\) with fixed alignment).
+7. **Translation bounds**: default max shift ±15 px, debug max shift ±5 px.
+8. **Rotation bounds**: default search ±2°, hard max ±5°, coarse step 0.5° (debug 1.0°), bicubic interpolation.
+9. **Pair winner policy**: primary metric decides winner (default NCC); tie-break by lower L2 score when primary scores match.

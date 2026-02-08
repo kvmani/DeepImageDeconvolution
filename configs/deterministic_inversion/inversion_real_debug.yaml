@@ -1,10 +1,14 @@
-# Debug config for deterministic mixing-fraction inversion (synthetic single-pair).
+# Debug config for deterministic mixing-fraction inversion (real mixed patterns; batch mode).
 data:
-  mode: synthetic_pair
-  synthetic_pair:
-    a_path: data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp
-    b_path: data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp
-    x_true: 0.5
+  mode: mixed_dir
+  mixed_dir: data/raw/Double Pattern Data/50-50 Double Pattern
+  mixed_recursive: false
+  candidate_pool:
+    root_dir: data/raw/Double Pattern Data/Good Pattern
+    a_pattern: "(?i)bcc"
+    b_pattern: "(?i)fcc"
+    recursive: false
+    max_per_group: 3
 
 deterministic_inversion:
   preprocess:
@@ -30,12 +34,12 @@ deterministic_inversion:
     enabled: ["ncc", "l2", "l1"]
     primary: ncc
   search:
-    strategy: exhaustive_grid
+    strategy: coarse_to_fine
     grid_steps: [0.1, 0.02, 0.005]
     refine_window_steps: 3
-    exhaustive_step: 0.01
+    exhaustive_step: 0.005
   alignment:
-    enabled: false
+    enabled: true
     translation:
       enabled: true
       max_shift_px: 5
@@ -47,12 +51,13 @@ deterministic_inversion:
     interpolation_order: 3
 
 output:
-  out_dir: outputs/deterministic_inversion_debug
+  out_dir: outputs/deterministic_inversion_real_debug
   save_curves: true
   write_html_report: true
 
 debug:
   enabled: true
   seed: 7
-  sample_limit: null
-  max_pairs: null
+  sample_limit: 3
+  max_pairs: 6
+

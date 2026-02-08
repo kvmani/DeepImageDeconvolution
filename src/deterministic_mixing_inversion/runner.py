@@ -22,6 +22,7 @@ from src.deterministic_mixing_inversion.io import (
     PatternRecord,
     build_pair_indices,
     candidate_paths,
+    load_pattern,
     load_candidate_pools,
     load_mixed_patterns,
 )
@@ -47,6 +48,8 @@ from src.deterministic_mixing_inversion.reporting import (
     write_html_report,
     write_metric_summary_csv,
     write_score_curve_csv,
+    write_synthetic_pair_html_report,
+    write_synthetic_pair_summary_csv,
 )
 from src.deterministic_mixing_inversion.search import (
     MetricBest,
@@ -90,6 +93,35 @@ def _sanitize_name(text: str) -> str:
 
 def _mix_patterns(image_a: np.ndarray, image_b: np.ndarray, mix_fraction: float) -> np.ndarray:
     return (mix_fraction * image_a + (1.0 - mix_fraction) * image_b).astype(np.float32)
+
+
+def _resolve_data_mode(data_cfg: Dict[str, Any]) -> str:
+    mode_raw = data_cfg.get("mode")
+    if mode_raw is not None:
+        return str(mode_raw).strip().lower()
+    synthetic_cfg = data_cfg.get("synthetic_pair")
+    if isinstance(synthetic_cfg, dict) and synthetic_cfg.get("a_path") and synthetic_cfg.get("b_path"):
+        return "synthetic_pair"
+    if data_cfg.get("a_path") and data_cfg.get("b_path"):
+        return "synthetic_pair"
+    return "mixed_dir"
+
+
+def _resolve_synthetic_pair_inputs(data_cfg: Dict[str, Any]) -> tuple[Path, Path, float]:
+    synthetic_cfg = data_cfg.get("synthetic_pair", {})
+    if synthetic_cfg is None:
+        synthetic_cfg = {}
+    if not isinstance(synthetic_cfg, dict):
+        raise ValueError("data.synthetic_pair must be a mapping.")
+
+    a_path_raw = synthetic_cfg.get("a_path") or data_cfg.get("a_path")
+    b_path_raw = synthetic_cfg.get("b_path") or data_cfg.get("b_path")
+    if not a_path_raw or not b_path_raw:
+        raise ValueError("Synthetic pair mode requires data.synthetic_pair.a_path and data.synthetic_pair.b_path.")
+    x_true = float(synthetic_cfg.get("x_true", 0.5))
+    x_true = float(np.clip(x_true, 0.0, 1.0))
+
+    return Path(str(a_path_raw)), Path(str(b_path_raw)), x_true
 
 
 def _prepare_pattern_for_sample(
@@ -282,8 +314,8 @@ def _save_sample_artifacts(
         mixed_matched,
         best_pair_a.raw_matched,
         best_pair_b.raw_matched,
-        aligned_reconstruction,
-        aligned_reconstruction,
+        None,
+        None,
         aligned_reconstruction,
         panel_path,
     )
@@ -323,14 +355,216 @@ def run_deterministic_inversion(
     sample_limit = debug_cfg.get("sample_limit") if debug_enabled else None
     max_pairs = debug_cfg.get("max_pairs") if debug_enabled else None
 
-    mixed_dir = Path(str(data_cfg.get("mixed_dir", "data/raw/Double Pattern Data/50-50 Double Pattern")))
-    mixed_recursive = bool(data_cfg.get("mixed_recursive", False))
+    data_mode = _resolve_data_mode(data_cfg)
     candidate_cfg = data_cfg.get("candidate_pool", {})
 
     preprocess_settings = parse_preprocess_settings(inversion_cfg.get("preprocess", {}))
     metric_names, primary_metric, metric_specs = parse_metric_config(inversion_cfg.get("metrics", {}))
     search_settings = parse_search_settings(inversion_cfg.get("search", {}))
     alignment_settings = parse_alignment_settings(inversion_cfg.get("alignment", {}))
+
+    if data_mode == "synthetic_pair":
+        a_path, b_path, x_true = _resolve_synthetic_pair_inputs(data_cfg)
+        if not a_path.exists():
+            raise FileNotFoundError(f"Synthetic A pattern not found: {a_path}")
+        if not b_path.exists():
+            raise FileNotFoundError(f"Synthetic B pattern not found: {b_path}")
+
+        record_a = load_pattern(a_path)
+        record_b = load_pattern(b_path)
+        if record_a.image.shape != record_b.image.shape:
+            if not preprocess_settings.auto_crop_to_target:
+                raise ValueError(
+                    "Synthetic pair shapes do not match. Enable deterministic_inversion.preprocess.auto_crop_to_target "
+                    "or provide shape-matched inputs."
+                )
+            target_shape = (
+                min(record_a.image.shape[0], record_b.image.shape[0]),
+                min(record_a.image.shape[1], record_b.image.shape[1]),
+            )
+        else:
+            target_shape = record_a.image.shape
+
+        mask = build_centered_mask(target_shape) if preprocess_settings.mask_enabled else None
+        prepared_a = _prepare_pattern_for_sample(record_a, target_shape, preprocess_settings, mask)
+        prepared_b = _prepare_pattern_for_sample(record_b, target_shape, preprocess_settings, mask)
+
+        mixed_true = _mix_patterns(prepared_a.raw_matched, prepared_b.raw_matched, x_true)
+        if mask is not None:
+            mixed_true = mixed_true.copy()
+            mixed_true[~mask] = 0.0
+        mixed_processed, _ = preprocess_pattern(mixed_true, preprocess_settings, mask)
+
+        logger.info(
+            "Synthetic pair: A=%s B=%s | x_true=%.4f | shape=%s | metrics=%s | search=%s",
+            a_path.name,
+            b_path.name,
+            x_true,
+            target_shape,
+            metric_names,
+            search_settings.strategy,
+        )
+
+        results_jsonl = output_dir / "results.jsonl"
+        if results_jsonl.exists():
+            results_jsonl.unlink()
+
+        inputs_dir = output_dir / "synthetic_inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+        input_a_path = inputs_dir / "A.png"
+        input_b_path = inputs_dir / "B.png"
+        input_c_path = inputs_dir / "C.png"
+        write_image_16bit(input_a_path, np.clip(prepared_a.raw_matched, 0.0, 1.0))
+        write_image_16bit(input_b_path, np.clip(prepared_b.raw_matched, 0.0, 1.0))
+        write_image_16bit(input_c_path, np.clip(mixed_true, 0.0, 1.0))
+
+        objective_results: List[Dict[str, Any]] = []
+        for objective_metric in metric_names:
+            objective_spec = {objective_metric: metric_specs[objective_metric]}
+            pair_eval = _evaluate_pair(
+                pattern_a=prepared_a,
+                pattern_b=prepared_b,
+                mixed_processed=mixed_processed,
+                mask=mask,
+                metric_names=[objective_metric],
+                metric_specs=objective_spec,
+                primary_metric=objective_metric,
+                search_settings=search_settings,
+                alignment_settings=alignment_settings,
+            )
+            best = pair_eval.best_by_metric[objective_metric]
+            x_hat = float(best.fraction)
+
+            reconstruction_processed = _mix_patterns(prepared_a.processed, prepared_b.processed, x_hat)
+            reconstruction_processed = apply_rigid_alignment(
+                reconstruction_processed,
+                pair_eval.alignment,
+                interpolation_order=alignment_settings.interpolation_order,
+                mask=mask,
+            )
+            metrics_at_x = compute_metric_values(reconstruction_processed, mixed_processed, mask, metric_names)
+
+            reconstruction_raw = _mix_patterns(prepared_a.raw_matched, prepared_b.raw_matched, x_hat)
+            reconstruction_raw = apply_rigid_alignment(
+                reconstruction_raw,
+                pair_eval.alignment,
+                interpolation_order=alignment_settings.interpolation_order,
+                mask=mask,
+            )
+
+            recon_dir = output_dir / "reconstructions"
+            recon_dir.mkdir(parents=True, exist_ok=True)
+            c_hat_path = recon_dir / f"C_hat__opt_{objective_metric}.png"
+            write_image_16bit(c_hat_path, np.clip(reconstruction_raw, 0.0, 1.0))
+
+            monitoring_dir = output_dir / "monitoring" / "qualitative"
+            monitoring_dir.mkdir(parents=True, exist_ok=True)
+            qual_path = monitoring_dir / f"synthetic_pair__opt_{objective_metric}.png"
+            make_qual_grid(
+                mixed_true,
+                prepared_a.raw_matched,
+                prepared_b.raw_matched,
+                None,
+                None,
+                reconstruction_raw,
+                qual_path,
+            )
+
+            curve_csv_path: Optional[Path] = None
+            if bool(output_cfg.get("save_curves", True)):
+                curves_dir = output_dir / "curves"
+                curves_dir.mkdir(parents=True, exist_ok=True)
+                curve_csv_path = curves_dir / f"score_curve__opt_{objective_metric}.csv"
+                write_score_curve_csv(curve_csv_path, pair_eval.score_curves)
+
+            objective_results.append(
+                {
+                    "objective_metric": objective_metric,
+                    "x_true": float(x_true),
+                    "x_hat": x_hat,
+                    "x_signed_error": float(x_hat - float(x_true)),
+                    "x_abs_error": float(abs(x_hat - float(x_true))),
+                    "objective_score": float(best.score),
+                    "top_margin": best.top_margin,
+                    "metrics": {name: float(metrics_at_x[name]) for name in metric_names},
+                    "evaluated_points": int(pair_eval.evaluated_points),
+                    "alignment": {
+                        "angle_deg": float(pair_eval.alignment.angle_deg),
+                        "shift_y": float(pair_eval.alignment.shift_y),
+                        "shift_x": float(pair_eval.alignment.shift_x),
+                        "alignment_score": float(pair_eval.alignment.score),
+                    },
+                    "artifacts": {
+                        "c_hat": safe_relpath(c_hat_path, output_dir),
+                        "qual_panel": safe_relpath(qual_path, output_dir),
+                        "score_curve_csv": safe_relpath(curve_csv_path, output_dir) if curve_csv_path else None,
+                    },
+                }
+            )
+
+        summary_payload: Dict[str, Any] = {
+            "mode": "synthetic_pair",
+            "inputs": {
+                "a_path": str(a_path),
+                "b_path": str(b_path),
+                "x_true": float(x_true),
+                "artifacts": {
+                    "a": safe_relpath(input_a_path, output_dir),
+                    "b": safe_relpath(input_b_path, output_dir),
+                    "c": safe_relpath(input_c_path, output_dir),
+                },
+            },
+            "metrics_enabled": metric_names,
+            "objective_results": objective_results,
+        }
+        append_jsonl(results_jsonl, summary_payload)
+
+        summary_csv_path = output_dir / "summary_metrics.csv"
+        write_synthetic_pair_summary_csv(summary_csv_path, objective_results, metric_names)
+
+        html_path: Optional[Path] = None
+        if bool(output_cfg.get("write_html_report", True)):
+            html_path = output_dir / "report" / "index.html"
+            write_synthetic_pair_html_report(html_path, output_dir=output_dir, payload=summary_payload)
+
+        report_payload: Dict[str, Any] = {
+            "run_id": output_dir.name,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "status": "completed",
+            "stage": "deterministic_synthetic_pair",
+            "mode": "synthetic_pair",
+            "metrics_enabled": metric_names,
+            "summary": {
+                "processed": 1,
+                "candidate_pairs": 1,
+                "objective_metrics": len(objective_results),
+            },
+            "artifacts": {
+                "results_jsonl": safe_relpath(results_jsonl, output_dir),
+                "inputs_dir": safe_relpath(inputs_dir, output_dir),
+                "reconstructions_dir": safe_relpath(output_dir / "reconstructions", output_dir),
+                "summary_metrics_csv": safe_relpath(summary_csv_path, output_dir),
+                "html_report": safe_relpath(html_path, output_dir) if html_path else None,
+            },
+        }
+        update_progress_report(output_dir, report_payload)
+
+        return {
+            "mode": "synthetic_pair",
+            "processed": 1,
+            "total_mixed": 1,
+            "candidate_pairs": 1,
+            "objective_metrics": len(objective_results),
+            "results_jsonl": str(results_jsonl),
+            "summary_metrics_csv": str(summary_csv_path),
+            "html_report": str(html_path) if html_path else None,
+        }
+
+    if data_mode not in {"mixed_dir"}:
+        raise ValueError("data.mode must be one of {'mixed_dir', 'synthetic_pair'}.")
+
+    mixed_dir = Path(str(data_cfg.get("mixed_dir", "data/raw/Double Pattern Data/50-50 Double Pattern")))
+    mixed_recursive = bool(data_cfg.get("mixed_recursive", False))
 
     mixed_records = load_mixed_patterns(
         mixed_dir=mixed_dir,

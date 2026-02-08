@@ -4,13 +4,13 @@ This document describes the implemented deterministic (non-ML) mixing-fraction i
 
 ## 1) Run commands
 
-Default run:
+Default run (synthetic single-pair):
 
 ```bash
 python3 scripts/invert_mixing_fraction.py
 ```
 
-Debug run (fast, deterministic):
+Debug run (synthetic single-pair, faster grid):
 
 ```bash
 python3 scripts/invert_mixing_fraction.py --debug
@@ -24,15 +24,21 @@ python3 scripts/invert_mixing_fraction.py \
   --run-tag baseline_detinv_01
 ```
 
-Common overrides:
+Override the synthetic A/B inputs and `x_true`:
 
 ```bash
 python3 scripts/invert_mixing_fraction.py \
-  --mixed-dir "data/raw/Double Pattern Data/50-50 Double Pattern" \
-  --candidate-root "data/raw/Double Pattern Data/Good Pattern" \
-  --a-pattern "(?i)bcc" \
-  --b-pattern "(?i)fcc" \
-  --set deterministic_inversion.search.grid_steps='[0.1,0.02,0.005]'
+  --set data.synthetic_pair.a_path="data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp" \
+  --set data.synthetic_pair.b_path="data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp" \
+  --set data.synthetic_pair.x_true=0.65 \
+  --set deterministic_inversion.search.exhaustive_step=0.005
+```
+
+Evaluate on real mixed patterns (batch mode):
+
+```bash
+python3 scripts/invert_mixing_fraction.py \
+  --config configs/deterministic_inversion/inversion_real_default.yaml
 ```
 
 Synthetic robustness benchmark (metric ranking with known `x_true`):
@@ -43,16 +49,21 @@ python3 scripts/summarize_metric_robustness.py --debug
 
 ## 2) Implemented defaults
 
-- Mixed input set: `data/raw/Double Pattern Data/50-50 Double Pattern`
-- Candidate pool: `data/raw/Double Pattern Data/Good Pattern` with `bcc` as A-type and `fcc` as B-type
+Synthetic single-pair mode (default):
+
+- A/B inputs: explicit `data.synthetic_pair.a_path` / `data.synthetic_pair.b_path`
+- Synthetic mix: `C = x_true * A + (1-x_true) * B`
+- Per-metric optimization: for each enabled metric, estimate `x_hat` that optimizes that metric, then report all metrics at `C_hat(x_hat)`
+
+Real mixed-pattern batch mode (via `inversion_real_default.yaml`):
+
+- Mixed input set: `data.mixed_dir` (default `data/raw/Double Pattern Data/50-50 Double Pattern`)
+- Candidate pool: `data.candidate_pool.root_dir` (default `data/raw/Double Pattern Data/Good Pattern`) with `bcc` as A-type and `fcc` as B-type
 - Masking: centered circular mask (enabled by default)
 - Background correction: subtractive default; divisive optional
-- Metrics: `ncc` (primary), `ssim`, `l2`, `l1`
-- Search: coarse-to-fine grid by default
-- Alignment: enabled by default
-  - translation enabled (default max shift 15 px; debug config uses 5 px)
-  - rotation enabled (default ±2° search, hard maximum ±5°, step 0.5°)
-  - interpolation order 3 (bicubic)
+- Metrics: `ncc`, `ssim`, `l2`, `l1`
+- Search: grid search (config-controlled)
+- Alignment: config-controlled (enabled by default in real batch configs)
 
 ## 3) Output artifacts
 
@@ -60,11 +71,12 @@ Each run writes to `output.out_dir` (default `outputs/deterministic_inversion`):
 
 - `resolved_config.yaml`
 - `manifest.json`
-- `report.json` (status/progress summary; updated during run)
-- `results.jsonl` (one record per mixed sample)
-- `summary_metrics.csv`
-- `curves/*.csv` (score-vs-fraction curves for best pair per sample)
-- `reconstructions/*_C_hat.png` (16-bit reconstructed mixed pattern)
+- `report.json` (status/summary)
+- `results.jsonl`
+- `summary_metrics.csv` (per-metric optimization summary in synthetic mode; aggregate summary in batch mode)
+- `curves/*.csv` (score-vs-fraction curves)
+- `synthetic_inputs/A.png`, `synthetic_inputs/B.png`, `synthetic_inputs/C.png` (synthetic mode)
+- `reconstructions/*.png` (includes `C_hat__opt_<metric>.png` in synthetic mode)
 - `monitoring/qualitative/*.png` (qualitative panels)
 - `report/index.html` (if enabled)
 

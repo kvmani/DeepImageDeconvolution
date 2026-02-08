@@ -1,15 +1,16 @@
-# Default config for deterministic (non-ML) mixing-fraction inversion.
+# Deterministic mixing-fraction inversion (real mixed patterns; batch mode).
 #
-# Default mode is a synthetic single-pair experiment:
-# - Load pure A/B patterns from explicit paths
-# - Synthesize a mixed C with known x_true
-# - For each enabled metric, optimize x_hat for that metric, then report all metrics at C_hat(x_hat)
+# This config evaluates mixed patterns C loaded from a directory against a candidate bank of pure A/B patterns.
 data:
-  mode: synthetic_pair
-  synthetic_pair:
-    a_path: data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp
-    b_path: data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp
-    x_true: 0.5
+  mode: mixed_dir
+  mixed_dir: data/raw/Double Pattern Data/50-50 Double Pattern
+  mixed_recursive: false
+  candidate_pool:
+    root_dir: data/raw/Double Pattern Data/Good Pattern
+    a_pattern: "(?i)bcc"
+    b_pattern: "(?i)fcc"
+    recursive: false
+    max_per_group: null
 
 deterministic_inversion:
   preprocess:
@@ -33,15 +34,14 @@ deterministic_inversion:
       sigma_high: 3.0
   metrics:
     enabled: ["ncc", "ssim", "l2", "l1"]
-    # Primary metric is only used for legacy mixed-dir batch mode.
     primary: ncc
   search:
-    strategy: exhaustive_grid
+    strategy: coarse_to_fine
     grid_steps: [0.05, 0.01, 0.002]
     refine_window_steps: 4
     exhaustive_step: 0.002
   alignment:
-    enabled: false
+    enabled: true
     translation:
       enabled: true
       max_shift_px: 15
@@ -53,7 +53,7 @@ deterministic_inversion:
     interpolation_order: 3
 
 output:
-  out_dir: outputs/deterministic_inversion
+  out_dir: outputs/deterministic_inversion_real
   save_curves: true
   write_html_report: true
 
@@ -62,3 +62,4 @@ debug:
   seed: 42
   sample_limit: null
   max_pairs: null
+

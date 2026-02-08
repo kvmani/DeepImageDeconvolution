@@ -193,11 +193,15 @@ Inference saves predicted `A`/`B` images, reconstructed `C_hat`, and a `weights.
 
 ## Deterministic inversion baseline
 
-Run the non-ML deterministic inversion baseline with:
+Run the non-ML deterministic inversion baseline (synthetic single-pair `A/B → C`, estimate `x_hat` per metric) with:
 
 ```bash
+python3 scripts/invert_mixing_fraction.py
 python3 scripts/invert_mixing_fraction.py --debug
 ```
+
+The default config reads `data.synthetic_pair.a_path` / `data.synthetic_pair.b_path`, synthesizes `C` with `x_true`,
+then estimates `x_hat` separately for each enabled metric and reports all metrics at `C_hat(x_hat)` in `report/index.html`.
 
 Run the synthetic robustness benchmark (metric ranking by `x` recovery) with:
 
@@ -205,8 +209,10 @@ Run the synthetic robustness benchmark (metric ranking by `x` recovery) with:
 python3 scripts/summarize_metric_robustness.py --debug
 ```
 
-Use `configs/deterministic_inversion/inversion_default.yaml` for full runs and `configs/deterministic_inversion/inversion_debug.yaml` for fast deterministic checks.
-The script writes `results.jsonl`, per-sample score curves, `report.json`, and 16-bit reconstructions under `output.out_dir`.
+Use `configs/deterministic_inversion/inversion_default.yaml` / `inversion_debug.yaml` for the synthetic single-pair mode.
+To evaluate on real mixed patterns in batch mode, use `configs/deterministic_inversion/inversion_real_default.yaml` (or `inversion_real_debug.yaml`).
+
+The script writes `results.jsonl`, `summary_metrics.csv`, per-metric score curves, `report.json`, and 16-bit reconstructions under `output.out_dir`.
 Benchmark configs live at `configs/deterministic_inversion/robustness_default.yaml` and `configs/deterministic_inversion/robustness_debug.yaml`.
 
 ### Inference GUI

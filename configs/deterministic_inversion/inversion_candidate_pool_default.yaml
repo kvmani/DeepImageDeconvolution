@@ -1,15 +1,24 @@
-# Debug config for deterministic mixing-fraction inversion (synthetic single-pair).
+# Deterministic mixing-fraction inversion (candidate-pool synthetic search).
+#
+# - Randomly sample a candidate pool from root_dir
+# - Select synthetic_pairs random unique pairs as hidden ground truth
+# - Synthesize C from the clean A/B pair
+# - Recover the best pair + x_hat using noisy templates (optional)
 data:
-  mode: synthetic_pair
-  synthetic_pair:
-    a_path: data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp
-    b_path: data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp
-    x_true: [0.5]
+  mode: candidate_pool_synthetic
+  candidate_pool:
+    root_dir: data/raw/Double Pattern Data/Good Pattern
+    recursive: false
+    max_candidates: 12
+    sample_seed: null
+    synthetic_pairs: 3
+    synthetic_seed: null
+    x_true: [0.2, 0.5, 0.8]
     noise:
       enabled: true
       gaussian_std: 0.01
       rotation_deg_max: 2.0
-      seed: 7
+      seed: null
 
 deterministic_inversion:
   preprocess:
@@ -22,7 +31,7 @@ deterministic_inversion:
     background_correction:
       enabled: true
       mode: subtractive
-      sigma: 15.0
+      sigma: 21.0
       epsilon: 1.0e-6
     standardize:
       enabled: true
@@ -37,32 +46,32 @@ deterministic_inversion:
       high_cut: 1.0
       rolloff: 0.02
   metrics:
-    enabled: ["ncc", "l2", "l1"]
+    enabled: ["ncc", "ssim", "l2", "l1"]
     primary: ncc
   search:
     strategy: exhaustive_grid
-    grid_steps: [0.1, 0.02, 0.005]
-    refine_window_steps: 3
-    exhaustive_step: 0.01
+    grid_steps: [0.05, 0.01, 0.002]
+    refine_window_steps: 4
+    exhaustive_step: 0.002
   alignment:
     enabled: false
     translation:
       enabled: true
-      max_shift_px: 5
+      max_shift_px: 15
     rotation:
       enabled: true
       search_range_deg: 2.0
       hard_max_deg: 5.0
-      step_deg: 1.0
+      step_deg: 0.5
     interpolation_order: 3
 
 output:
-  out_dir: outputs/deterministic_inversion_debug
+  out_dir: outputs/deterministic_inversion_candidate_pool
   save_curves: true
   write_html_report: true
 
 debug:
-  enabled: true
-  seed: 7
+  enabled: false
+  seed: 42
   sample_limit: null
   max_pairs: null

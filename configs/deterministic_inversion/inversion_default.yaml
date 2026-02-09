@@ -9,7 +9,12 @@ data:
   synthetic_pair:
     a_path: data/raw/Double Pattern Data/Good Pattern/Perfect_BCC-1.bmp
     b_path: data/raw/Double Pattern Data/Good Pattern/Perfect_FCC-1.bmp
-    x_true: 0.5
+    x_true: [0.1, 0.3, 0.5]
+    noise:
+      enabled: true
+      gaussian_std: 0.01
+      rotation_deg_max: 2.0
+      seed: null
 
 deterministic_inversion:
   preprocess:
@@ -31,6 +36,11 @@ deterministic_inversion:
       enabled: false
       sigma_low: 1.0
       sigma_high: 3.0
+    fft_filter:
+      enabled: false
+      low_cut: 0.0
+      high_cut: 1.0
+      rolloff: 0.02
   metrics:
     enabled: ["ncc", "ssim", "l2", "l1"]
     # Primary metric is only used for legacy mixed-dir batch mode.

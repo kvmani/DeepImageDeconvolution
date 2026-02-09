@@ -200,8 +200,9 @@ python3 scripts/invert_mixing_fraction.py
 python3 scripts/invert_mixing_fraction.py --debug
 ```
 
-The default config reads `data.synthetic_pair.a_path` / `data.synthetic_pair.b_path`, synthesizes `C` with `x_true`,
-then estimates `x_hat` separately for each enabled metric and reports all metrics at `C_hat(x_hat)` in `report/index.html`.
+The default config reads `data.synthetic_pair.a_path` / `data.synthetic_pair.b_path`, synthesizes `C` with `x_true` (scalar or list),
+applies optional noise/rotation to A/B for inversion, then estimates `x_hat` separately for each enabled metric and reports all metrics at
+`C_hat(x_hat)` in `report/index.html`.
 
 Run the synthetic robustness benchmark (metric ranking by `x` recovery) with:
 
@@ -211,6 +212,10 @@ python3 scripts/summarize_metric_robustness.py --debug
 
 Use `configs/deterministic_inversion/inversion_default.yaml` / `inversion_debug.yaml` for the synthetic single-pair mode.
 To evaluate on real mixed patterns in batch mode, use `configs/deterministic_inversion/inversion_real_default.yaml` (or `inversion_real_debug.yaml`).
+To search unknown A/B pairs from a candidate pool (random synthetic trials), use
+`configs/deterministic_inversion/inversion_candidate_pool_default.yaml` (or `inversion_candidate_pool_debug.yaml`).
+This mode samples a candidate pool, synthesizes hidden pairs, then recovers the best pair and `x_hat` using NCC as the primary metric,
+with optional FFT band-pass filtering and noisy-template inversion.
 
 The script writes `results.jsonl`, `summary_metrics.csv`, per-metric score curves, `report.json`, and 16-bit reconstructions under `output.out_dir`.
 Benchmark configs live at `configs/deterministic_inversion/robustness_default.yaml` and `configs/deterministic_inversion/robustness_debug.yaml`.

@@ -28,6 +28,10 @@ class PreprocessSettings:
     dog_enabled: bool
     dog_sigma_low: float
     dog_sigma_high: float
+    fft_enabled: bool
+    fft_low_cut: float
+    fft_high_cut: float
+    fft_rolloff: float
 
 
 def parse_preprocess_settings(preprocess_cfg: Dict[str, object]) -> PreprocessSettings:
@@ -36,6 +40,7 @@ def parse_preprocess_settings(preprocess_cfg: Dict[str, object]) -> PreprocessSe
     background_cfg = preprocess_cfg.get("background_correction", {}) if isinstance(preprocess_cfg, dict) else {}
     standardize_cfg = preprocess_cfg.get("standardize", {}) if isinstance(preprocess_cfg, dict) else {}
     dog_cfg = preprocess_cfg.get("dog", {}) if isinstance(preprocess_cfg, dict) else {}
+    fft_cfg = preprocess_cfg.get("fft_filter", {}) if isinstance(preprocess_cfg, dict) else {}
 
     return PreprocessSettings(
         auto_crop_to_target=bool(preprocess_cfg.get("auto_crop_to_target", False)),
@@ -52,6 +57,10 @@ def parse_preprocess_settings(preprocess_cfg: Dict[str, object]) -> PreprocessSe
         dog_enabled=bool(dog_cfg.get("enabled", False)),
         dog_sigma_low=float(dog_cfg.get("sigma_low", 1.0)),
         dog_sigma_high=float(dog_cfg.get("sigma_high", 3.0)),
+        fft_enabled=bool(fft_cfg.get("enabled", False)),
+        fft_low_cut=float(fft_cfg.get("low_cut", 0.0)),
+        fft_high_cut=float(fft_cfg.get("high_cut", 1.0)),
+        fft_rolloff=float(fft_cfg.get("rolloff", 0.0)),
     )
 
 
@@ -146,6 +155,59 @@ def _apply_dog(
     return dog_image.astype(np.float32)
 
 
+def _apply_fft_filter(
+    image: np.ndarray,
+    settings: PreprocessSettings,
+    mask: Optional[np.ndarray],
+) -> np.ndarray:
+    if not settings.fft_enabled:
+        return image
+
+    low_cut = max(0.0, min(float(settings.fft_low_cut), 1.0))
+    high_cut = max(0.0, min(float(settings.fft_high_cut), 1.0))
+    if high_cut <= low_cut:
+        raise ValueError("fft_filter.high_cut must be greater than fft_filter.low_cut.")
+
+    rows, cols = image.shape
+    fy = np.fft.fftshift(np.fft.fftfreq(rows))
+    fx = np.fft.fftshift(np.fft.fftfreq(cols))
+    freq_radius = np.sqrt(fy[:, None] ** 2 + fx[None, :] ** 2)
+    max_radius = float(np.sqrt(0.5**2 + 0.5**2))
+    freq_norm = freq_radius / max_radius
+
+    rolloff = max(0.0, float(settings.fft_rolloff))
+    if rolloff > 0.0:
+        low_start = max(low_cut - rolloff, 0.0)
+        low_end = min(low_cut + rolloff, 1.0)
+        if low_cut > 0.0:
+            low_t = (freq_norm - low_start) / max(low_end - low_start, 1e-6)
+            low_t = np.clip(low_t, 0.0, 1.0)
+            low_taper = low_t * low_t * (3.0 - 2.0 * low_t)
+        else:
+            low_taper = np.ones_like(freq_norm, dtype=np.float32)
+
+        high_start = max(high_cut - rolloff, 0.0)
+        high_end = min(high_cut + rolloff, 1.0)
+        if high_cut < 1.0:
+            high_t = (high_end - freq_norm) / max(high_end - high_start, 1e-6)
+            high_t = np.clip(high_t, 0.0, 1.0)
+            high_taper = high_t * high_t * (3.0 - 2.0 * high_t)
+        else:
+            high_taper = np.ones_like(freq_norm, dtype=np.float32)
+
+        filter_mask = (low_taper * high_taper).astype(np.float32)
+    else:
+        filter_mask = ((freq_norm >= low_cut) & (freq_norm <= high_cut)).astype(np.float32)
+
+    fft_data = np.fft.fftshift(np.fft.fft2(image))
+    filtered = np.fft.ifft2(np.fft.ifftshift(fft_data * filter_mask))
+    filtered_real = np.real(filtered).astype(np.float32)
+    if mask is not None:
+        filtered_real = filtered_real.copy()
+        filtered_real[~mask] = 0.0
+    return filtered_real
+
+
 def preprocess_pattern(
     image: np.ndarray,
     settings: PreprocessSettings,
@@ -176,6 +238,10 @@ def preprocess_pattern(
         "background_sigma": settings.background_sigma,
         "standardize_enabled": settings.standardize_enabled,
         "dog_enabled": settings.dog_enabled,
+        "fft_filter_enabled": settings.fft_enabled,
+        "fft_filter_low_cut": settings.fft_low_cut,
+        "fft_filter_high_cut": settings.fft_high_cut,
+        "fft_filter_rolloff": settings.fft_rolloff,
     }
 
     if settings.mask_enabled and mask is not None:
@@ -193,5 +259,5 @@ def preprocess_pattern(
     working = _apply_background_correction(working, settings, mask if settings.mask_enabled else None)
     working = _apply_standardization(working, settings, mask if settings.mask_enabled else None)
     working = _apply_dog(working, settings, mask if settings.mask_enabled else None)
+    working = _apply_fft_filter(working, settings, mask if settings.mask_enabled else None)
     return working.astype(np.float32), metadata
-

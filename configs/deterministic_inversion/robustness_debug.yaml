@@ -27,6 +27,11 @@ deterministic_inversion:
       enabled: false
       sigma_low: 1.0
       sigma_high: 3.0
+    fft_filter:
+      enabled: false
+      low_cut: 0.0
+      high_cut: 1.0
+      rolloff: 0.02
   metrics:
     enabled: ["ncc", "l2", "l1"]
     primary: ncc
@@ -70,4 +75,3 @@ output:
 debug:
   enabled: true
   seed: 7
-

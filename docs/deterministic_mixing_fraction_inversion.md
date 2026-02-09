@@ -119,6 +119,9 @@ Preprocessing is not a convenience step; it changes the inversion landscape. The
    - mean-center and variance-normalize **inside the mask**.
 4. Optional band emphasis (for robustness studies):
    - DoG / high-pass to emphasize Kikuchi band structure.
+5. Optional FFT band-pass filter (config-controlled):
+   - apply a radial frequency mask in Fourier space to emphasize band structure;
+   - configure `low_cut` / `high_cut` on normalized frequency radius (0–1) with optional rolloff.
 
 Important: high-pass / DoG may create negative values; metrics must support signed data (NCC does; SSIM may require careful configuration).
 
@@ -215,6 +218,18 @@ Near a grain boundary, \(A\) and \(B\) are typically not “given”; they must 
 
 Rationale: without this, the method cannot be applied robustly to real boundary regions where “pure” patterns vary across the scan.
 
+### 8.1 Candidate-pool synthetic search (implemented)
+
+To validate pair discovery when A/B are unknown, the current deterministic runner supports a **candidate-pool synthetic** mode:
+
+1. Randomly sample a candidate pool (e.g., all patterns under `data/raw/Double Pattern Data/Good Pattern`).
+2. Select a small number of random unique pairs (default: 3) as hidden ground truth.
+3. Synthesize clean \(C\) from the true pair and known \(x_{\text{true}}\).
+4. Evaluate all unique candidate pairs (no A/B order duplication) to recover the best pair and \(x^\*\), using NCC as the primary score by default.
+5. Optionally apply small Gaussian noise + rotation to **templates only** (not to the ground-truth \(C\)) to model experimental nuisance.
+
+This mode yields per-trial summaries (x_true, x_hat, pair match, metrics), plus HTML reports with true vs predicted pair imagery.
+
 ---
 
 ## 9) Synthetic benchmark plan (ground-truth, nuisance sweeps)
@@ -290,7 +305,7 @@ Rationale: this baseline’s goal is **robustness and correctness**, not re-deri
 Current status:
 
 1. One command can:
-   - accept paths for \(A\), \(B\) and synthesize \(C\) with known \(x_{\text{true}}\),
+   - accept paths for \(A\), \(B\), synthesize \(C\) with known \(x_{\text{true}}\) (scalar or list), and optionally perturb A/B with mild noise/rotation for inversion,
    - run preprocessing,
    - estimate \(x^\*\) per metric objective (e.g. optimize NCC vs optimize L1),
    - write: `results.jsonl`, score-vs-\(x\) curves, reconstructions, and an HTML summary with images + per-metric tables.

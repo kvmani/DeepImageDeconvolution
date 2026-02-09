@@ -160,6 +160,60 @@ def load_candidate_pools(
     return candidates_a, candidates_b
 
 
+def load_candidate_pool(
+    candidate_cfg: Dict[str, object],
+    logger: logging.Logger,
+    sample_seed: int | None,
+) -> List[PatternRecord]:
+    """Load a single candidate pool for synthetic pair discovery.
+
+    Parameters
+    ----------
+    candidate_cfg:
+        Candidate pool configuration.
+    logger:
+        Logger used for pre-flight reporting.
+    sample_seed:
+        Optional RNG seed for random sampling.
+
+    Returns
+    -------
+    list of PatternRecord
+        Candidate records.
+    """
+    recursive = bool(candidate_cfg.get("recursive", False))
+    max_candidates = candidate_cfg.get("max_candidates")
+    max_value = int(max_candidates) if max_candidates is not None else None
+
+    root_dir_raw = candidate_cfg.get("root_dir")
+    if root_dir_raw is None:
+        raise ValueError("candidate_pool.root_dir is required.")
+    root_dir = Path(str(root_dir_raw))
+    if not root_dir.exists():
+        raise FileNotFoundError(f"Candidate pool root directory not found: {root_dir}")
+
+    all_paths = sorted(collect_image_paths(root_dir, recursive=recursive))
+    if not all_paths:
+        raise ValueError("No candidate patterns found in candidate_pool.root_dir.")
+
+    if max_value is not None and max_value > 0 and len(all_paths) > max_value:
+        rng = np.random.default_rng(sample_seed)
+        indices = rng.choice(len(all_paths), size=max_value, replace=False)
+        sampled_paths = [all_paths[int(idx)] for idx in sorted(indices)]
+    else:
+        sampled_paths = list(all_paths)
+
+    logger.info(
+        "Candidate pool discovered: total=%d sampled=%d (recursive=%s, max_candidates=%s, seed=%s)",
+        len(all_paths),
+        len(sampled_paths),
+        recursive,
+        max_value,
+        sample_seed,
+    )
+    return [load_pattern(path) for path in sampled_paths]
+
+
 def build_pair_indices(
     candidates_a: Sequence[PatternRecord],
     candidates_b: Sequence[PatternRecord],
@@ -184,6 +238,21 @@ def build_pair_indices(
     pair_indices: List[tuple[int, int]] = []
     for idx_a, _ in enumerate(candidates_a):
         for idx_b, _ in enumerate(candidates_b):
+            pair_indices.append((idx_a, idx_b))
+            if max_pairs is not None and max_pairs > 0 and len(pair_indices) >= max_pairs:
+                return pair_indices
+    return pair_indices
+
+
+def build_unique_pair_indices(
+    candidates: Sequence[PatternRecord],
+    max_pairs: int | None,
+) -> List[tuple[int, int]]:
+    """Build unique (i<j) pair indices for a single candidate pool."""
+    pair_indices: List[tuple[int, int]] = []
+    total = len(candidates)
+    for idx_a in range(total):
+        for idx_b in range(idx_a + 1, total):
             pair_indices.append((idx_a, idx_b))
             if max_pairs is not None and max_pairs > 0 and len(pair_indices) >= max_pairs:
                 return pair_indices

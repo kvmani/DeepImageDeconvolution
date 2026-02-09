@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import csv
 import logging
 from pathlib import Path
 import random
@@ -10,6 +11,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
+from scipy.ndimage import rotate
 
 from src.deterministic_mixing_inversion.alignment import (
     AlignmentSettings,
@@ -21,8 +23,10 @@ from src.deterministic_mixing_inversion.alignment import (
 from src.deterministic_mixing_inversion.io import (
     PatternRecord,
     build_pair_indices,
+    build_unique_pair_indices,
     candidate_paths,
     load_pattern,
+    load_candidate_pool,
     load_candidate_pools,
     load_mixed_patterns,
 )
@@ -45,6 +49,8 @@ from src.deterministic_mixing_inversion.reporting import (
     append_jsonl,
     plot_primary_fraction_histogram,
     update_progress_report,
+    write_candidate_pool_html_report,
+    write_candidate_pool_summary_csv,
     write_html_report,
     write_metric_summary_csv,
     write_score_curve_csv,
@@ -107,7 +113,51 @@ def _resolve_data_mode(data_cfg: Dict[str, Any]) -> str:
     return "mixed_dir"
 
 
-def _resolve_synthetic_pair_inputs(data_cfg: Dict[str, Any]) -> tuple[Path, Path, float]:
+def _resolve_candidate_pool_x_values(
+    candidate_cfg: Dict[str, Any],
+    pairs_requested: int,
+    rng: np.random.Generator,
+) -> List[float]:
+    x_true_raw = candidate_cfg.get("x_true", 0.5)
+    if isinstance(x_true_raw, (list, tuple)):
+        if not x_true_raw:
+            raise ValueError("candidate_pool.x_true must be non-empty when provided as a list.")
+        x_values = [float(np.clip(value, 0.0, 1.0)) for value in x_true_raw]
+    else:
+        x_values = [float(np.clip(float(x_true_raw), 0.0, 1.0))]
+
+    if len(x_values) >= pairs_requested:
+        return x_values[:pairs_requested]
+    if len(x_values) == 1:
+        return [x_values[0]] * pairs_requested
+    return [float(rng.choice(x_values)) for _ in range(pairs_requested)]
+
+
+def _parse_candidate_pool_noise_settings(
+    candidate_cfg: Dict[str, Any],
+    debug_enabled: bool,
+    debug_seed: int,
+) -> Dict[str, Any]:
+    noise_cfg = candidate_cfg.get("noise", {}) if isinstance(candidate_cfg, dict) else {}
+    if noise_cfg is None:
+        noise_cfg = {}
+    if not isinstance(noise_cfg, dict):
+        raise ValueError("candidate_pool.noise must be a mapping.")
+    enabled = bool(noise_cfg.get("enabled", False))
+    gaussian_std = float(noise_cfg.get("gaussian_std", 0.0))
+    rotation_deg_max = float(noise_cfg.get("rotation_deg_max", 0.0))
+    seed = noise_cfg.get("seed")
+    if seed is None and debug_enabled:
+        seed = debug_seed
+    return {
+        "enabled": enabled,
+        "gaussian_std": max(0.0, gaussian_std),
+        "rotation_deg_max": max(0.0, rotation_deg_max),
+        "seed": seed,
+    }
+
+
+def _resolve_synthetic_pair_inputs(data_cfg: Dict[str, Any]) -> tuple[Path, Path, List[float]]:
     synthetic_cfg = data_cfg.get("synthetic_pair", {})
     if synthetic_cfg is None:
         synthetic_cfg = {}
@@ -118,10 +168,79 @@ def _resolve_synthetic_pair_inputs(data_cfg: Dict[str, Any]) -> tuple[Path, Path
     b_path_raw = synthetic_cfg.get("b_path") or data_cfg.get("b_path")
     if not a_path_raw or not b_path_raw:
         raise ValueError("Synthetic pair mode requires data.synthetic_pair.a_path and data.synthetic_pair.b_path.")
-    x_true = float(synthetic_cfg.get("x_true", 0.5))
-    x_true = float(np.clip(x_true, 0.0, 1.0))
+    x_true_raw = synthetic_cfg.get("x_true", 0.5)
+    if isinstance(x_true_raw, (list, tuple)):
+        if not x_true_raw:
+            raise ValueError("data.synthetic_pair.x_true must be a non-empty list when provided as a list.")
+        x_values = [float(np.clip(value, 0.0, 1.0)) for value in x_true_raw]
+    else:
+        x_values = [float(np.clip(float(x_true_raw), 0.0, 1.0))]
 
-    return Path(str(a_path_raw)), Path(str(b_path_raw)), x_true
+    return Path(str(a_path_raw)), Path(str(b_path_raw)), x_values
+
+
+def _parse_synthetic_noise_settings(
+    data_cfg: Dict[str, Any],
+    debug_enabled: bool,
+    debug_seed: int,
+) -> Dict[str, Any]:
+    synthetic_cfg = data_cfg.get("synthetic_pair", {})
+    noise_cfg = synthetic_cfg.get("noise", {}) if isinstance(synthetic_cfg, dict) else {}
+    if noise_cfg is None:
+        noise_cfg = {}
+    if not isinstance(noise_cfg, dict):
+        raise ValueError("data.synthetic_pair.noise must be a mapping.")
+    enabled = bool(noise_cfg.get("enabled", False))
+    gaussian_std = float(noise_cfg.get("gaussian_std", 0.0))
+    rotation_deg_max = float(noise_cfg.get("rotation_deg_max", 0.0))
+    seed = noise_cfg.get("seed")
+    if seed is None and debug_enabled:
+        seed = debug_seed
+    return {
+        "enabled": enabled,
+        "gaussian_std": max(0.0, gaussian_std),
+        "rotation_deg_max": max(0.0, rotation_deg_max),
+        "seed": seed,
+    }
+
+
+def _apply_input_noise(
+    image: np.ndarray,
+    settings: Dict[str, Any],
+    rng: np.random.Generator,
+    mask: np.ndarray | None,
+) -> tuple[np.ndarray, Dict[str, float]]:
+    if not settings.get("enabled", False):
+        if mask is not None:
+            image = image.copy()
+            image[~mask] = 0.0
+        return image.astype(np.float32), {"rotation_deg": 0.0, "gaussian_std": 0.0}
+
+    working = image.astype(np.float32, copy=True)
+    rotation_max = float(settings.get("rotation_deg_max", 0.0))
+    rotation_deg = 0.0
+    if rotation_max > 0.0:
+        rotation_deg = float(rng.uniform(-rotation_max, rotation_max))
+        working = rotate(
+            working,
+            angle=rotation_deg,
+            reshape=False,
+            order=3,
+            mode="constant",
+            cval=0.0,
+            prefilter=False,
+        ).astype(np.float32)
+
+    gaussian_std = float(settings.get("gaussian_std", 0.0))
+    if gaussian_std > 0.0:
+        noise = rng.normal(loc=0.0, scale=gaussian_std, size=working.shape).astype(np.float32)
+        working = working + noise
+
+    if mask is not None:
+        working = working.copy()
+        working[~mask] = 0.0
+    working = np.clip(working, 0.0, 1.0).astype(np.float32)
+    return working, {"rotation_deg": rotation_deg, "gaussian_std": gaussian_std}
 
 
 def _prepare_pattern_for_sample(
@@ -364,7 +483,7 @@ def run_deterministic_inversion(
     alignment_settings = parse_alignment_settings(inversion_cfg.get("alignment", {}))
 
     if data_mode == "synthetic_pair":
-        a_path, b_path, x_true = _resolve_synthetic_pair_inputs(data_cfg)
+        a_path, b_path, x_values = _resolve_synthetic_pair_inputs(data_cfg)
         if not a_path.exists():
             raise FileNotFoundError(f"Synthetic A pattern not found: {a_path}")
         if not b_path.exists():
@@ -386,20 +505,41 @@ def run_deterministic_inversion(
             target_shape = record_a.image.shape
 
         mask = build_centered_mask(target_shape) if preprocess_settings.mask_enabled else None
-        prepared_a = _prepare_pattern_for_sample(record_a, target_shape, preprocess_settings, mask)
-        prepared_b = _prepare_pattern_for_sample(record_b, target_shape, preprocess_settings, mask)
+        prepared_clean_a = _prepare_pattern_for_sample(record_a, target_shape, preprocess_settings, mask)
+        prepared_clean_b = _prepare_pattern_for_sample(record_b, target_shape, preprocess_settings, mask)
 
-        mixed_true = _mix_patterns(prepared_a.raw_matched, prepared_b.raw_matched, x_true)
-        if mask is not None:
-            mixed_true = mixed_true.copy()
-            mixed_true[~mask] = 0.0
-        mixed_processed, _ = preprocess_pattern(mixed_true, preprocess_settings, mask)
+        noise_settings = _parse_synthetic_noise_settings(data_cfg, debug_enabled, debug_seed)
+        rng = np.random.default_rng(noise_settings.get("seed"))
+        noisy_a_image, noisy_a_meta = _apply_input_noise(prepared_clean_a.raw_matched, noise_settings, rng, mask)
+        noisy_b_image, noisy_b_meta = _apply_input_noise(prepared_clean_b.raw_matched, noise_settings, rng, mask)
+        noise_payload = {
+            "enabled": bool(noise_settings.get("enabled", False)),
+            "gaussian_std": float(noise_settings.get("gaussian_std", 0.0)),
+            "rotation_deg_max": float(noise_settings.get("rotation_deg_max", 0.0)),
+            "seed": noise_settings.get("seed"),
+            "a_rotation_deg": float(noisy_a_meta.get("rotation_deg", 0.0)),
+            "b_rotation_deg": float(noisy_b_meta.get("rotation_deg", 0.0)),
+        }
+        noisy_a_record = PatternRecord(
+            pattern_id=f"{record_a.pattern_id}_noisy",
+            path=record_a.path,
+            image=noisy_a_image,
+            source_dtype=record_a.source_dtype,
+        )
+        noisy_b_record = PatternRecord(
+            pattern_id=f"{record_b.pattern_id}_noisy",
+            path=record_b.path,
+            image=noisy_b_image,
+            source_dtype=record_b.source_dtype,
+        )
+        prepared_a = _prepare_pattern_for_sample(noisy_a_record, target_shape, preprocess_settings, mask)
+        prepared_b = _prepare_pattern_for_sample(noisy_b_record, target_shape, preprocess_settings, mask)
 
         logger.info(
-            "Synthetic pair: A=%s B=%s | x_true=%.4f | shape=%s | metrics=%s | search=%s",
+            "Synthetic pair: A=%s B=%s | x_true=%s | shape=%s | metrics=%s | search=%s",
             a_path.name,
             b_path.name,
-            x_true,
+            [float(x) for x in x_values],
             target_shape,
             metric_names,
             search_settings.strategy,
@@ -413,72 +553,87 @@ def run_deterministic_inversion(
         inputs_dir.mkdir(parents=True, exist_ok=True)
         input_a_path = inputs_dir / "A.png"
         input_b_path = inputs_dir / "B.png"
-        input_c_path = inputs_dir / "C.png"
-        write_image_16bit(input_a_path, np.clip(prepared_a.raw_matched, 0.0, 1.0))
-        write_image_16bit(input_b_path, np.clip(prepared_b.raw_matched, 0.0, 1.0))
-        write_image_16bit(input_c_path, np.clip(mixed_true, 0.0, 1.0))
+        write_image_16bit(input_a_path, np.clip(prepared_clean_a.raw_matched, 0.0, 1.0))
+        write_image_16bit(input_b_path, np.clip(prepared_clean_b.raw_matched, 0.0, 1.0))
+        input_a_noisy_path = inputs_dir / "A_noisy.png"
+        input_b_noisy_path = inputs_dir / "B_noisy.png"
+        write_image_16bit(input_a_noisy_path, np.clip(prepared_a.raw_matched, 0.0, 1.0))
+        write_image_16bit(input_b_noisy_path, np.clip(prepared_b.raw_matched, 0.0, 1.0))
+        payloads: List[Dict[str, Any]] = []
+        all_objective_results: List[Dict[str, Any]] = []
+        recon_dir = output_dir / "reconstructions"
+        recon_dir.mkdir(parents=True, exist_ok=True)
+        monitoring_dir = output_dir / "monitoring" / "qualitative"
+        monitoring_dir.mkdir(parents=True, exist_ok=True)
+        curves_dir = output_dir / "curves"
+        if bool(output_cfg.get("save_curves", True)):
+            curves_dir.mkdir(parents=True, exist_ok=True)
 
-        objective_results: List[Dict[str, Any]] = []
-        for objective_metric in metric_names:
-            objective_spec = {objective_metric: metric_specs[objective_metric]}
-            pair_eval = _evaluate_pair(
-                pattern_a=prepared_a,
-                pattern_b=prepared_b,
-                mixed_processed=mixed_processed,
-                mask=mask,
-                metric_names=[objective_metric],
-                metric_specs=objective_spec,
-                primary_metric=objective_metric,
-                search_settings=search_settings,
-                alignment_settings=alignment_settings,
-            )
-            best = pair_eval.best_by_metric[objective_metric]
-            x_hat = float(best.fraction)
+        for x_true in x_values:
+            mixed_true = _mix_patterns(prepared_clean_a.raw_matched, prepared_clean_b.raw_matched, x_true)
+            if mask is not None:
+                mixed_true = mixed_true.copy()
+                mixed_true[~mask] = 0.0
+            mixed_processed, _ = preprocess_pattern(mixed_true, preprocess_settings, mask)
 
-            reconstruction_processed = _mix_patterns(prepared_a.processed, prepared_b.processed, x_hat)
-            reconstruction_processed = apply_rigid_alignment(
-                reconstruction_processed,
-                pair_eval.alignment,
-                interpolation_order=alignment_settings.interpolation_order,
-                mask=mask,
-            )
-            metrics_at_x = compute_metric_values(reconstruction_processed, mixed_processed, mask, metric_names)
+            x_tag = f"{int(round(x_true * 1000)):04d}"
+            input_c_path = inputs_dir / f"C_x{x_tag}.png"
+            write_image_16bit(input_c_path, np.clip(mixed_true, 0.0, 1.0))
 
-            reconstruction_raw = _mix_patterns(prepared_a.raw_matched, prepared_b.raw_matched, x_hat)
-            reconstruction_raw = apply_rigid_alignment(
-                reconstruction_raw,
-                pair_eval.alignment,
-                interpolation_order=alignment_settings.interpolation_order,
-                mask=mask,
-            )
+            objective_results: List[Dict[str, Any]] = []
+            for objective_metric in metric_names:
+                objective_spec = {objective_metric: metric_specs[objective_metric]}
+                pair_eval = _evaluate_pair(
+                    pattern_a=prepared_a,
+                    pattern_b=prepared_b,
+                    mixed_processed=mixed_processed,
+                    mask=mask,
+                    metric_names=[objective_metric],
+                    metric_specs=objective_spec,
+                    primary_metric=objective_metric,
+                    search_settings=search_settings,
+                    alignment_settings=alignment_settings,
+                )
+                best = pair_eval.best_by_metric[objective_metric]
+                x_hat = float(best.fraction)
 
-            recon_dir = output_dir / "reconstructions"
-            recon_dir.mkdir(parents=True, exist_ok=True)
-            c_hat_path = recon_dir / f"C_hat__opt_{objective_metric}.png"
-            write_image_16bit(c_hat_path, np.clip(reconstruction_raw, 0.0, 1.0))
+                reconstruction_processed = _mix_patterns(prepared_a.processed, prepared_b.processed, x_hat)
+                reconstruction_processed = apply_rigid_alignment(
+                    reconstruction_processed,
+                    pair_eval.alignment,
+                    interpolation_order=alignment_settings.interpolation_order,
+                    mask=mask,
+                )
+                metrics_at_x = compute_metric_values(reconstruction_processed, mixed_processed, mask, metric_names)
 
-            monitoring_dir = output_dir / "monitoring" / "qualitative"
-            monitoring_dir.mkdir(parents=True, exist_ok=True)
-            qual_path = monitoring_dir / f"synthetic_pair__opt_{objective_metric}.png"
-            make_qual_grid(
-                mixed_true,
-                prepared_a.raw_matched,
-                prepared_b.raw_matched,
-                None,
-                None,
-                reconstruction_raw,
-                qual_path,
-            )
+                reconstruction_raw = _mix_patterns(prepared_a.raw_matched, prepared_b.raw_matched, x_hat)
+                reconstruction_raw = apply_rigid_alignment(
+                    reconstruction_raw,
+                    pair_eval.alignment,
+                    interpolation_order=alignment_settings.interpolation_order,
+                    mask=mask,
+                )
 
-            curve_csv_path: Optional[Path] = None
-            if bool(output_cfg.get("save_curves", True)):
-                curves_dir = output_dir / "curves"
-                curves_dir.mkdir(parents=True, exist_ok=True)
-                curve_csv_path = curves_dir / f"score_curve__opt_{objective_metric}.csv"
-                write_score_curve_csv(curve_csv_path, pair_eval.score_curves)
+                c_hat_path = recon_dir / f"C_hat__opt_{objective_metric}__x{x_tag}.png"
+                write_image_16bit(c_hat_path, np.clip(reconstruction_raw, 0.0, 1.0))
 
-            objective_results.append(
-                {
+                qual_path = monitoring_dir / f"synthetic_pair__opt_{objective_metric}__x{x_tag}.png"
+                make_qual_grid(
+                    mixed_true,
+                    prepared_clean_a.raw_matched,
+                    prepared_clean_b.raw_matched,
+                    prepared_a.raw_matched,
+                    prepared_b.raw_matched,
+                    reconstruction_raw,
+                    qual_path,
+                )
+
+                curve_csv_path: Optional[Path] = None
+                if bool(output_cfg.get("save_curves", True)):
+                    curve_csv_path = curves_dir / f"score_curve__opt_{objective_metric}__x{x_tag}.csv"
+                    write_score_curve_csv(curve_csv_path, pair_eval.score_curves)
+
+                record = {
                     "objective_metric": objective_metric,
                     "x_true": float(x_true),
                     "x_hat": x_hat,
@@ -486,6 +641,9 @@ def run_deterministic_inversion(
                     "x_abs_error": float(abs(x_hat - float(x_true))),
                     "objective_score": float(best.score),
                     "top_margin": best.top_margin,
+                    "noise_gaussian_std": noise_payload["gaussian_std"],
+                    "noise_a_rotation_deg": noise_payload["a_rotation_deg"],
+                    "noise_b_rotation_deg": noise_payload["b_rotation_deg"],
                     "metrics": {name: float(metrics_at_x[name]) for name in metric_names},
                     "evaluated_points": int(pair_eval.evaluated_points),
                     "alignment": {
@@ -500,32 +658,38 @@ def run_deterministic_inversion(
                         "score_curve_csv": safe_relpath(curve_csv_path, output_dir) if curve_csv_path else None,
                     },
                 }
-            )
+                objective_results.append(record)
+                all_objective_results.append(record)
 
-        summary_payload: Dict[str, Any] = {
-            "mode": "synthetic_pair",
-            "inputs": {
-                "a_path": str(a_path),
-                "b_path": str(b_path),
-                "x_true": float(x_true),
-                "artifacts": {
-                    "a": safe_relpath(input_a_path, output_dir),
-                    "b": safe_relpath(input_b_path, output_dir),
-                    "c": safe_relpath(input_c_path, output_dir),
+            summary_payload: Dict[str, Any] = {
+                "mode": "synthetic_pair",
+                "sample_id": f"x_true_{x_tag}",
+                "inputs": {
+                    "a_path": str(a_path),
+                    "b_path": str(b_path),
+                    "x_true": float(x_true),
+                    "noise": noise_payload,
+                    "artifacts": {
+                        "a": safe_relpath(input_a_path, output_dir),
+                        "b": safe_relpath(input_b_path, output_dir),
+                        "a_noisy": safe_relpath(input_a_noisy_path, output_dir),
+                        "b_noisy": safe_relpath(input_b_noisy_path, output_dir),
+                        "c": safe_relpath(input_c_path, output_dir),
+                    },
                 },
-            },
-            "metrics_enabled": metric_names,
-            "objective_results": objective_results,
-        }
-        append_jsonl(results_jsonl, summary_payload)
+                "metrics_enabled": metric_names,
+                "objective_results": objective_results,
+            }
+            append_jsonl(results_jsonl, summary_payload)
+            payloads.append(summary_payload)
 
         summary_csv_path = output_dir / "summary_metrics.csv"
-        write_synthetic_pair_summary_csv(summary_csv_path, objective_results, metric_names)
+        write_synthetic_pair_summary_csv(summary_csv_path, all_objective_results, metric_names)
 
         html_path: Optional[Path] = None
         if bool(output_cfg.get("write_html_report", True)):
             html_path = output_dir / "report" / "index.html"
-            write_synthetic_pair_html_report(html_path, output_dir=output_dir, payload=summary_payload)
+            write_synthetic_pair_html_report(html_path, output_dir=output_dir, payloads=payloads)
 
         report_payload: Dict[str, Any] = {
             "run_id": output_dir.name,
@@ -535,9 +699,10 @@ def run_deterministic_inversion(
             "mode": "synthetic_pair",
             "metrics_enabled": metric_names,
             "summary": {
-                "processed": 1,
+                "processed": len(x_values),
                 "candidate_pairs": 1,
-                "objective_metrics": len(objective_results),
+                "objective_metrics": len(metric_names),
+                "x_true_values": len(x_values),
             },
             "artifacts": {
                 "results_jsonl": safe_relpath(results_jsonl, output_dir),
@@ -551,17 +716,429 @@ def run_deterministic_inversion(
 
         return {
             "mode": "synthetic_pair",
-            "processed": 1,
-            "total_mixed": 1,
+            "processed": len(x_values),
+            "total_mixed": len(x_values),
             "candidate_pairs": 1,
-            "objective_metrics": len(objective_results),
+            "objective_metrics": len(metric_names),
+            "x_true_values": len(x_values),
             "results_jsonl": str(results_jsonl),
             "summary_metrics_csv": str(summary_csv_path),
             "html_report": str(html_path) if html_path else None,
         }
 
+    if data_mode == "candidate_pool_synthetic":
+        candidate_cfg = data_cfg.get("candidate_pool", {})
+        if not isinstance(candidate_cfg, dict):
+            raise ValueError("data.candidate_pool must be a mapping for candidate_pool_synthetic mode.")
+
+        pairs_requested = int(candidate_cfg.get("synthetic_pairs", 1))
+        if pairs_requested <= 0:
+            raise ValueError("candidate_pool.synthetic_pairs must be a positive integer.")
+
+        sample_seed = candidate_cfg.get("sample_seed")
+        if sample_seed is None and debug_enabled:
+            sample_seed = debug_seed
+        synthetic_seed = candidate_cfg.get("synthetic_seed")
+        if synthetic_seed is None and debug_enabled:
+            synthetic_seed = debug_seed
+
+        candidates_clean = load_candidate_pool(candidate_cfg, logger, sample_seed)
+        if len(candidates_clean) < 2:
+            raise ValueError("candidate_pool_synthetic requires at least two candidate patterns.")
+
+        shapes = [record.image.shape for record in candidates_clean]
+        if any(shape != shapes[0] for shape in shapes):
+            if not preprocess_settings.auto_crop_to_target:
+                raise ValueError(
+                    "Candidate pool shapes do not match. Enable deterministic_inversion.preprocess.auto_crop_to_target "
+                    "or provide shape-matched inputs."
+                )
+            target_shape = (
+                min(shape[0] for shape in shapes),
+                min(shape[1] for shape in shapes),
+            )
+        else:
+            target_shape = shapes[0]
+
+        mask = build_centered_mask(target_shape) if preprocess_settings.mask_enabled else None
+
+        noise_settings = _parse_candidate_pool_noise_settings(candidate_cfg, debug_enabled, debug_seed)
+        noise_rng = np.random.default_rng(noise_settings.get("seed"))
+
+        prepared_clean: List[PreparedPattern] = []
+        prepared_noisy: List[PreparedPattern] = []
+        noise_meta: Dict[str, Dict[str, float]] = {}
+        for record in candidates_clean:
+            clean_prepared = _prepare_pattern_for_sample(record, target_shape, preprocess_settings, mask)
+            prepared_clean.append(clean_prepared)
+            noisy_image, noisy_info = _apply_input_noise(
+                clean_prepared.raw_matched,
+                noise_settings,
+                noise_rng,
+                mask,
+            )
+            noise_meta[clean_prepared.record.pattern_id] = {
+                "rotation_deg": float(noisy_info.get("rotation_deg", 0.0)),
+                "gaussian_std": float(noisy_info.get("gaussian_std", 0.0)),
+            }
+            noisy_record = PatternRecord(
+                pattern_id=clean_prepared.record.pattern_id,
+                path=clean_prepared.record.path,
+                image=noisy_image,
+                source_dtype=clean_prepared.record.source_dtype,
+            )
+            prepared_noisy.append(_prepare_pattern_for_sample(noisy_record, target_shape, preprocess_settings, mask))
+
+        pair_indices = build_unique_pair_indices(
+            prepared_clean,
+            int(max_pairs) if max_pairs else None,
+        )
+        if not pair_indices:
+            raise ValueError("No candidate pairs available to evaluate in candidate_pool_synthetic mode.")
+
+        pair_rng = np.random.default_rng(synthetic_seed)
+        if pairs_requested > len(pair_indices):
+            logger.warning(
+                "Requested synthetic_pairs=%d exceeds available pairs=%d; reducing to available count.",
+                pairs_requested,
+                len(pair_indices),
+            )
+            pairs_requested = len(pair_indices)
+
+        chosen_pair_indices = pair_rng.choice(len(pair_indices), size=pairs_requested, replace=False)
+        x_values = _resolve_candidate_pool_x_values(candidate_cfg, pairs_requested, pair_rng)
+
+        logger.info(
+            "Candidate pool synthetic: candidates=%d pairs=%d trials=%d | metrics=%s primary=%s | noise=%s",
+            len(prepared_clean),
+            len(pair_indices),
+            pairs_requested,
+            metric_names,
+            primary_metric,
+            noise_settings.get("enabled", False),
+        )
+
+        start_time = time.perf_counter()
+
+        candidate_manifest_path = output_dir / "candidate_pool.csv"
+        with candidate_manifest_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["index", "pattern_id", "path", "noise_rotation_deg", "noise_gaussian_std"],
+            )
+            writer.writeheader()
+            for idx, prepared in enumerate(prepared_clean):
+                meta = noise_meta.get(prepared.record.pattern_id, {})
+                writer.writerow(
+                    {
+                        "index": idx,
+                        "pattern_id": prepared.record.pattern_id,
+                        "path": str(prepared.record.path),
+                        "noise_rotation_deg": meta.get("rotation_deg", 0.0),
+                        "noise_gaussian_std": meta.get("gaussian_std", 0.0),
+                    }
+                )
+
+        results_jsonl = output_dir / "results.jsonl"
+        if results_jsonl.exists():
+            results_jsonl.unlink()
+
+        report_payload: Dict[str, Any] = {
+            "run_id": output_dir.name,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "status": "running",
+            "stage": "deterministic_candidate_pool",
+            "mode": "candidate_pool_synthetic",
+            "metrics_enabled": metric_names,
+            "primary_metric": primary_metric,
+            "progress": {"processed": 0, "total": pairs_requested, "percent": 0.0},
+            "latest_trial": None,
+            "artifacts": {"candidate_pool_csv": safe_relpath(candidate_manifest_path, output_dir)},
+        }
+        update_progress_report(output_dir, report_payload)
+
+        trial_results: List[Dict[str, Any]] = []
+        monitoring_dir = output_dir / "monitoring" / "qualitative"
+        monitoring_dir.mkdir(parents=True, exist_ok=True)
+        trials_dir = output_dir / "candidate_trials"
+        trials_dir.mkdir(parents=True, exist_ok=True)
+        curves_dir = output_dir / "curves"
+        if bool(output_cfg.get("save_curves", True)):
+            curves_dir.mkdir(parents=True, exist_ok=True)
+
+        for trial_idx, pair_choice_index in enumerate(chosen_pair_indices):
+            idx_a, idx_b = pair_indices[int(pair_choice_index)]
+            true_a_clean = prepared_clean[idx_a]
+            true_b_clean = prepared_clean[idx_b]
+            x_true = float(x_values[trial_idx])
+
+            mixed_true = _mix_patterns(true_a_clean.raw_matched, true_b_clean.raw_matched, x_true)
+            if mask is not None:
+                mixed_true = mixed_true.copy()
+                mixed_true[~mask] = 0.0
+            mixed_processed, _ = preprocess_pattern(mixed_true, preprocess_settings, mask)
+
+            best_pair_a: Optional[PreparedPattern] = None
+            best_pair_b: Optional[PreparedPattern] = None
+            best_pair_eval: Optional[PairEvaluation] = None
+            best_primary_score: Optional[float] = None
+            best_secondary_l2: Optional[float] = None
+            best_idx_a: Optional[int] = None
+            best_idx_b: Optional[int] = None
+
+            for idx_a_candidate, idx_b_candidate in pair_indices:
+                pattern_a = prepared_noisy[idx_a_candidate]
+                pattern_b = prepared_noisy[idx_b_candidate]
+                pair_eval = _evaluate_pair(
+                    pattern_a=pattern_a,
+                    pattern_b=pattern_b,
+                    mixed_processed=mixed_processed,
+                    mask=mask,
+                    metric_names=metric_names,
+                    metric_specs=metric_specs,
+                    primary_metric=primary_metric,
+                    search_settings=search_settings,
+                    alignment_settings=alignment_settings,
+                )
+                primary_score = pair_eval.best_by_metric[primary_metric].score
+                primary_objective = metric_specs[primary_metric].objective
+                primary_is_better = is_better(primary_score, best_primary_score, primary_objective)
+
+                candidate_l2 = pair_eval.best_by_metric.get("l2")
+                candidate_l2_score = float(candidate_l2.score) if candidate_l2 is not None else None
+                tie_breaker = False
+                if (
+                    not primary_is_better
+                    and best_primary_score is not None
+                    and abs(primary_score - best_primary_score) <= 1e-9
+                    and candidate_l2_score is not None
+                    and best_secondary_l2 is not None
+                ):
+                    tie_breaker = candidate_l2_score < best_secondary_l2
+
+                if primary_is_better or tie_breaker or best_pair_eval is None:
+                    best_pair_a = pattern_a
+                    best_pair_b = pattern_b
+                    best_pair_eval = pair_eval
+                    best_primary_score = primary_score
+                    if candidate_l2_score is not None:
+                        best_secondary_l2 = candidate_l2_score
+                    best_idx_a = idx_a_candidate
+                    best_idx_b = idx_b_candidate
+
+            if (
+                best_pair_a is None
+                or best_pair_b is None
+                or best_pair_eval is None
+                or best_idx_a is None
+                or best_idx_b is None
+            ):
+                raise RuntimeError("No valid candidate pair produced a score in candidate_pool_synthetic mode.")
+
+            primary_fraction = best_pair_eval.best_by_metric[primary_metric].fraction
+            reconstruction_processed = _mix_patterns(best_pair_a.processed, best_pair_b.processed, primary_fraction)
+            reconstruction_processed = apply_rigid_alignment(
+                reconstruction_processed,
+                best_pair_eval.alignment,
+                interpolation_order=alignment_settings.interpolation_order,
+                mask=mask,
+            )
+            metrics_at_primary = compute_metric_values(reconstruction_processed, mixed_processed, mask, metric_names)
+
+            reconstruction_raw = _mix_patterns(best_pair_a.raw_matched, best_pair_b.raw_matched, primary_fraction)
+            reconstruction_raw = apply_rigid_alignment(
+                reconstruction_raw,
+                best_pair_eval.alignment,
+                interpolation_order=alignment_settings.interpolation_order,
+                mask=mask,
+            )
+
+            objective_results: List[Dict[str, Any]] = []
+            for objective_metric in metric_names:
+                metric_best = best_pair_eval.best_by_metric[objective_metric]
+                objective_fraction = float(metric_best.fraction)
+                objective_recon = _mix_patterns(best_pair_a.processed, best_pair_b.processed, objective_fraction)
+                objective_recon = apply_rigid_alignment(
+                    objective_recon,
+                    best_pair_eval.alignment,
+                    interpolation_order=alignment_settings.interpolation_order,
+                    mask=mask,
+                )
+                objective_metrics = compute_metric_values(objective_recon, mixed_processed, mask, metric_names)
+                objective_results.append(
+                    {
+                        "objective_metric": objective_metric,
+                        "x_hat": objective_fraction,
+                        "objective_score": float(metric_best.score),
+                        "top_margin": metric_best.top_margin,
+                        "metrics": {name: float(objective_metrics[name]) for name in metric_names},
+                    }
+                )
+
+            trial_stub = f"trial_{trial_idx + 1:02d}"
+            trial_dir = trials_dir / trial_stub
+            trial_dir.mkdir(parents=True, exist_ok=True)
+
+            true_a_clean_path = trial_dir / "A_true.png"
+            true_b_clean_path = trial_dir / "B_true.png"
+            write_image_16bit(true_a_clean_path, np.clip(true_a_clean.raw_matched, 0.0, 1.0))
+            write_image_16bit(true_b_clean_path, np.clip(true_b_clean.raw_matched, 0.0, 1.0))
+
+            true_a_noisy = prepared_noisy[idx_a].raw_matched
+            true_b_noisy = prepared_noisy[idx_b].raw_matched
+            true_a_noisy_path = trial_dir / "A_true_noisy.png"
+            true_b_noisy_path = trial_dir / "B_true_noisy.png"
+            write_image_16bit(true_a_noisy_path, np.clip(true_a_noisy, 0.0, 1.0))
+            write_image_16bit(true_b_noisy_path, np.clip(true_b_noisy, 0.0, 1.0))
+
+            pred_a_clean = prepared_clean[best_idx_a]
+            pred_b_clean = prepared_clean[best_idx_b]
+            pred_a_noisy = prepared_noisy[best_idx_a].raw_matched
+            pred_b_noisy = prepared_noisy[best_idx_b].raw_matched
+            pred_a_path = trial_dir / "A_pred.png"
+            pred_b_path = trial_dir / "B_pred.png"
+            pred_a_noisy_path = trial_dir / "A_pred_noisy.png"
+            pred_b_noisy_path = trial_dir / "B_pred_noisy.png"
+            write_image_16bit(pred_a_path, np.clip(pred_a_clean.raw_matched, 0.0, 1.0))
+            write_image_16bit(pred_b_path, np.clip(pred_b_clean.raw_matched, 0.0, 1.0))
+            write_image_16bit(pred_a_noisy_path, np.clip(pred_a_noisy, 0.0, 1.0))
+            write_image_16bit(pred_b_noisy_path, np.clip(pred_b_noisy, 0.0, 1.0))
+
+            c_true_path = trial_dir / "C_true.png"
+            c_hat_path = trial_dir / "C_hat.png"
+            write_image_16bit(c_true_path, np.clip(mixed_true, 0.0, 1.0))
+            write_image_16bit(c_hat_path, np.clip(reconstruction_raw, 0.0, 1.0))
+
+            qual_path = monitoring_dir / f"{trial_stub}.png"
+            make_qual_grid(
+                mixed_true,
+                true_a_clean.raw_matched,
+                true_b_clean.raw_matched,
+                pred_a_clean.raw_matched,
+                pred_b_clean.raw_matched,
+                reconstruction_raw,
+                qual_path,
+            )
+
+            curve_csv_path: Optional[Path] = None
+            if bool(output_cfg.get("save_curves", True)):
+                curve_csv_path = curves_dir / f"{trial_stub}_score_curve.csv"
+                write_score_curve_csv(curve_csv_path, best_pair_eval.score_curves)
+
+            true_ids = {true_a_clean.record.pattern_id, true_b_clean.record.pattern_id}
+            pred_ids = {pred_a_clean.record.pattern_id, pred_b_clean.record.pattern_id}
+            pair_match = true_ids == pred_ids
+
+            trial_payload: Dict[str, Any] = {
+                "mode": "candidate_pool_synthetic",
+                "trial_id": trial_stub,
+                "x_true": x_true,
+                "x_hat_primary": float(primary_fraction),
+                "x_signed_error": float(primary_fraction - x_true),
+                "x_abs_error": float(abs(primary_fraction - x_true)),
+                "pair_match": pair_match,
+                "primary_metric": primary_metric,
+                "best_by_metric": {
+                    metric_name: {
+                        "x_hat": float(metric_result.fraction),
+                        "score": float(metric_result.score),
+                        "top_margin": metric_result.top_margin,
+                    }
+                    for metric_name, metric_result in best_pair_eval.best_by_metric.items()
+                },
+                "metrics_at_primary": {name: float(metrics_at_primary[name]) for name in metric_names},
+                "objective_results": objective_results,
+                "true_pair": {
+                    "a_id": true_a_clean.record.pattern_id,
+                    "a_path": str(true_a_clean.record.path),
+                    "b_id": true_b_clean.record.pattern_id,
+                    "b_path": str(true_b_clean.record.path),
+                },
+                "predicted_pair": {
+                    "a_id": pred_a_clean.record.pattern_id,
+                    "a_path": str(pred_a_clean.record.path),
+                    "b_id": pred_b_clean.record.pattern_id,
+                    "b_path": str(pred_b_clean.record.path),
+                },
+                "noise": {
+                    "enabled": bool(noise_settings.get("enabled", False)),
+                    "gaussian_std": float(noise_settings.get("gaussian_std", 0.0)),
+                    "rotation_deg_max": float(noise_settings.get("rotation_deg_max", 0.0)),
+                    "seed": noise_settings.get("seed"),
+                    "true_a_rotation_deg": noise_meta.get(true_a_clean.record.pattern_id, {}).get("rotation_deg", 0.0),
+                    "true_b_rotation_deg": noise_meta.get(true_b_clean.record.pattern_id, {}).get("rotation_deg", 0.0),
+                    "pred_a_rotation_deg": noise_meta.get(pred_a_clean.record.pattern_id, {}).get("rotation_deg", 0.0),
+                    "pred_b_rotation_deg": noise_meta.get(pred_b_clean.record.pattern_id, {}).get("rotation_deg", 0.0),
+                },
+                "artifacts": {
+                    "a_true": safe_relpath(true_a_clean_path, output_dir),
+                    "b_true": safe_relpath(true_b_clean_path, output_dir),
+                    "a_true_noisy": safe_relpath(true_a_noisy_path, output_dir),
+                    "b_true_noisy": safe_relpath(true_b_noisy_path, output_dir),
+                    "a_pred": safe_relpath(pred_a_path, output_dir),
+                    "b_pred": safe_relpath(pred_b_path, output_dir),
+                    "a_pred_noisy": safe_relpath(pred_a_noisy_path, output_dir),
+                    "b_pred_noisy": safe_relpath(pred_b_noisy_path, output_dir),
+                    "c_true": safe_relpath(c_true_path, output_dir),
+                    "c_hat": safe_relpath(c_hat_path, output_dir),
+                    "qual_panel": safe_relpath(qual_path, output_dir),
+                    "score_curve_csv": safe_relpath(curve_csv_path, output_dir) if curve_csv_path else None,
+                },
+            }
+            trial_results.append(trial_payload)
+            append_jsonl(results_jsonl, trial_payload)
+
+            report_payload["progress"] = {
+                "processed": trial_idx + 1,
+                "total": pairs_requested,
+                "percent": float((trial_idx + 1) / max(pairs_requested, 1)),
+            }
+            report_payload["latest_trial"] = trial_payload
+            report_payload["timestamp"] = datetime.now().isoformat(timespec="seconds")
+            update_progress_report(output_dir, report_payload)
+
+        summary_csv_path = output_dir / "summary_metrics.csv"
+        write_candidate_pool_summary_csv(summary_csv_path, trial_results, metric_names)
+
+        html_path: Optional[Path] = None
+        if bool(output_cfg.get("write_html_report", True)):
+            html_path = output_dir / "report" / "index.html"
+            write_candidate_pool_html_report(
+                html_path,
+                output_dir=output_dir,
+                trial_results=trial_results,
+                metric_names=metric_names,
+            )
+
+        report_payload["status"] = "completed"
+        report_payload["summary"] = {
+            "processed": len(trial_results),
+            "candidate_pairs": len(pair_indices),
+            "runtime_s": time.perf_counter() - start_time,
+        }
+        report_payload["artifacts"].update(
+            {
+                "results_jsonl": safe_relpath(results_jsonl, output_dir),
+                "summary_metrics_csv": safe_relpath(summary_csv_path, output_dir),
+                "html_report": safe_relpath(html_path, output_dir) if html_path else None,
+            }
+        )
+        report_payload["timestamp"] = datetime.now().isoformat(timespec="seconds")
+        update_progress_report(output_dir, report_payload)
+
+        return {
+            "mode": "candidate_pool_synthetic",
+            "processed": len(trial_results),
+            "total_mixed": len(trial_results),
+            "candidate_pairs": len(pair_indices),
+            "results_jsonl": str(results_jsonl),
+            "summary_metrics_csv": str(summary_csv_path),
+            "candidate_pool_csv": str(candidate_manifest_path),
+            "html_report": str(html_path) if html_path else None,
+        }
+
     if data_mode not in {"mixed_dir"}:
-        raise ValueError("data.mode must be one of {'mixed_dir', 'synthetic_pair'}.")
+        raise ValueError("data.mode must be one of {'mixed_dir', 'synthetic_pair', 'candidate_pool_synthetic'}.")
 
     mixed_dir = Path(str(data_cfg.get("mixed_dir", "data/raw/Double Pattern Data/50-50 Double Pattern")))
     mixed_recursive = bool(data_cfg.get("mixed_recursive", False))

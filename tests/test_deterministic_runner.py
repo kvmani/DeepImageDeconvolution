@@ -97,3 +97,72 @@ def test_runner_recovers_known_mixing_fraction(tmp_path: Path) -> None:
 
     assert (output_dir / "summary_metrics.csv").exists()
     assert (output_dir / "reconstructions").exists()
+
+
+def test_candidate_pool_synthetic_runs(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    pool_dir = data_dir / "pool"
+    pool_dir.mkdir(parents=True, exist_ok=True)
+
+    pattern_1 = _build_test_pattern(size=48, center_y=16.0, center_x=20.0, spread=160.0)
+    pattern_2 = _build_test_pattern(size=48, center_y=32.0, center_x=28.0, spread=180.0)
+    pattern_3 = _build_test_pattern(size=48, center_y=20.0, center_x=32.0, spread=140.0)
+    pattern_4 = _build_test_pattern(size=48, center_y=30.0, center_x=14.0, spread=200.0)
+
+    write_image_16bit(pool_dir / "cand_001.png", np.clip(pattern_1, 0.0, 1.0))
+    write_image_16bit(pool_dir / "cand_002.png", np.clip(pattern_2, 0.0, 1.0))
+    write_image_16bit(pool_dir / "cand_003.png", np.clip(pattern_3, 0.0, 1.0))
+    write_image_16bit(pool_dir / "cand_004.png", np.clip(pattern_4, 0.0, 1.0))
+
+    output_dir = tmp_path / "out_candidate"
+    config = {
+        "data": {
+            "mode": "candidate_pool_synthetic",
+            "candidate_pool": {
+                "root_dir": str(pool_dir),
+                "recursive": False,
+                "max_candidates": 4,
+                "sample_seed": 5,
+                "synthetic_pairs": 2,
+                "synthetic_seed": 5,
+                "x_true": [0.3, 0.7],
+                "noise": {"enabled": False},
+            },
+        },
+        "deterministic_inversion": {
+            "preprocess": {
+                "auto_crop_to_target": False,
+                "mask": {"enabled": False, "detect_existing": False},
+                "background_correction": {"enabled": False, "mode": "subtractive"},
+                "standardize": {"enabled": False},
+                "dog": {"enabled": False},
+                "fft_filter": {"enabled": False},
+            },
+            "metrics": {"enabled": ["ncc", "l2", "l1"], "primary": "ncc"},
+            "search": {
+                "strategy": "exhaustive_grid",
+                "exhaustive_step": 0.05,
+                "grid_steps": [0.1, 0.05],
+                "refine_window_steps": 2,
+            },
+            "alignment": {
+                "enabled": False,
+                "translation": {"enabled": False, "max_shift_px": 0},
+                "rotation": {"enabled": False, "search_range_deg": 0, "hard_max_deg": 5, "step_deg": 1},
+                "interpolation_order": 3,
+            },
+        },
+        "output": {"out_dir": str(output_dir), "save_curves": False, "write_html_report": False},
+        "debug": {"enabled": False},
+    }
+
+    logger = logging.getLogger("deterministic_candidate_pool_test")
+    summary = run_deterministic_inversion(config, logger=logger)
+    assert summary["processed"] == 2
+    assert summary["candidate_pairs"] == 6
+
+    assert (output_dir / "results.jsonl").exists()
+    assert (output_dir / "summary_metrics.csv").exists()
+    assert (output_dir / "candidate_pool.csv").exists()
+    assert (output_dir / "candidate_trials" / "trial_01").exists()
+    assert (output_dir / "report.json").exists()

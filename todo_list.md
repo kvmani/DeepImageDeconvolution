@@ -58,3 +58,4 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Inference: align GT preprocessing with input preprocessing for metrics and support mixed GT keys in GUI exports.
 - [x] Docs: expand inference CLI and GUI usage guidance.
 - [x] GUI: add pattern mixing playground app for interactive A/B mixing experiments.
+- [x] Baseline: add candidate-pool synthetic search with noisy templates and optional FFT filtering.

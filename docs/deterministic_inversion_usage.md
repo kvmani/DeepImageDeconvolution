@@ -83,6 +83,33 @@ Synthetic robustness benchmark (metric ranking with known `x_true`):
 python3 scripts/summarize_metric_robustness.py --debug
 ```
 
+Synthetic pair demo (sample candidates, create noisy `C`, then recover pair + `x_hat`):
+
+```bash
+python3 scripts/run_deterministic_pair_demo.py \
+  --index-a 0 --index-b 1 --x 0.5 \
+  --candidate-count 10 --sample-seed 7 \
+  --gaussian-enabled --rotation-enabled \
+  --run-tag lab_demo
+```
+
+Identify pair for an arbitrary mixed input `C`:
+
+```bash
+python3 scripts/identify_candidate_pair.py \
+  --mixed-path data/raw/Double\ Pattern\ Data/50-50\ Double\ Pattern/<image>.bmp \
+  --candidate-dir data/raw/Double\ Pattern\ Data/Good\ Pattern \
+  --candidate-count 10 \
+  --sample-seed 7 \
+  --run-tag identify_demo
+```
+
+Launch the deterministic GUI wrapper:
+
+```bash
+python3 scripts/run_deterministic_pair_gui.py
+```
+
 ## 2) Implemented defaults
 
 Synthetic single-pair mode (default):
@@ -112,6 +139,14 @@ Candidate-pool synthetic search (via `inversion_candidate_pool_default.yaml`):
 - Noisy templates: `data.candidate_pool.noise` (Gaussian + small rotation applied to templates only)
 - Alignment: **off by default** (enable if needed)
 
+Deterministic GUI/CLI demo defaults:
+
+- `configs/deterministic_inversion/pair_demo_default.yaml`
+- `configs/deterministic_inversion/pair_demo_debug.yaml`
+- NCC primary, L2 tie-break
+- two-stage search enabled by default
+- centered circular mask enabled by default
+
 ## 3) Output artifacts
 
 Each run writes to `output.out_dir` (default `outputs/deterministic_inversion`):
@@ -130,6 +165,9 @@ Each run writes to `output.out_dir` (default `outputs/deterministic_inversion`):
 - `candidate_trials/*` (per-trial A/B/C/C_hat artifacts in candidate-pool synthetic mode)
 
 If failures occur, an `error_report.json` is also written.
+
+GUI run outputs (default base `outputs/gui_pair_demo`) include the same machine-readable files plus
+`synthetic/` and `reconstructions/` image folders and `report/index.html`.
 
 Robustness benchmark runs (default `outputs/deterministic_robustness`) additionally write:
 

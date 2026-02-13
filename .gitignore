@@ -17,6 +17,9 @@ logs/
 outputs/
 outputs/deterministic_inversion*/
 outputs/deterministic_robustness*/
+outputs/gui_pair_demo*/
+outputs/synthetic_pair_case*/
+outputs/deterministic_pair_demo*/
 
 # Reporting build artifacts
 reports/summarize_results/build/

@@ -25,6 +25,7 @@ This is the operational task list. Update it whenever priorities change, work is
 - [ ] Data: decide the default mixing pipeline and weight distribution for training, then sync configs/docs.
 - [x] Baseline: implement deterministic mixing-fraction inversion CLI with reporting artifacts (`scripts/invert_mixing_fraction.py`).
 - [x] Baseline: add synthetic robustness benchmark sweep + metric ranking report (`scripts/summarize_metric_robustness.py`).
+- [x] Baseline: ship candidate-pair deterministic demo tooling (CLI + PySide6 GUI) with two-stage search, live ETA logs, and run manifests.
 - [ ] Baseline: run robustness sweeps with expanded nuisance grids and publish recommended default metric recipe.
 - [x] Training: standardize experiment naming and output folder conventions for reproducibility.
 - [ ] Docs: add a short baseline-results section to `docs/training_inference.md`.
@@ -59,3 +60,4 @@ This is the operational task list. Update it whenever priorities change, work is
 - [x] Docs: expand inference CLI and GUI usage guidance.
 - [x] GUI: add pattern mixing playground app for interactive A/B mixing experiments.
 - [x] Baseline: add candidate-pool synthetic search with noisy templates and optional FFT filtering.
+- [x] GUI: add deterministic pair-identification GUI wrapper for synthetic A/B/x demonstrations.

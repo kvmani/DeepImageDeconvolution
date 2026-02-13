@@ -49,6 +49,16 @@ def load_pattern(path: Path) -> PatternRecord:
     )
 
 
+def load_pattern_records_from_paths(paths: Sequence[Path]) -> List[PatternRecord]:
+    """Load pattern records for a sequence of paths."""
+    return [load_pattern(path) for path in paths]
+
+
+def load_pattern_records_from_dir(directory: Path, recursive: bool = False) -> List[PatternRecord]:
+    """Load all image patterns from a directory."""
+    return load_pattern_records_from_paths(collect_image_paths(directory, recursive=recursive))
+
+
 def _compile_regex(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern, flags=re.IGNORECASE)
 

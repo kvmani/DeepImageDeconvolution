@@ -6,6 +6,8 @@ ipywidgets>=8.0
 scipy>=1.10
 pytest>=7.4
 torch>=2.0
+
+# Desktop GUI runtime (inference GUI + deterministic pair demo GUI)
 PySide6>=6.6
 
 # Optional EBSD ecosystem packages for advanced deterministic baseline extensions

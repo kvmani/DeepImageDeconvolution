@@ -1,0 +1,91 @@
+# Deterministic pair-identification demo defaults (GUI/CLI friendly).
+data:
+  candidate_dir: data/raw/Double Pattern Data/Good Pattern
+  candidate_count: 10
+  sample_seed: 7
+  lock_candidates: true
+
+synthetic_case:
+  index_a: 0
+  index_b: 1
+  x_true: 0.5
+  noise:
+    gaussian_enabled: true
+    gaussian_std: 0.01
+    salt_pepper_enabled: false
+    salt_pepper_amount: 0.01
+    salt_vs_pepper: 0.5
+    rotation_enabled: true
+    rotation_max_deg: 2.0
+
+deterministic_inversion:
+  preprocess:
+    auto_crop_to_target: true
+    mask:
+      enabled: true
+      detect_existing: true
+      zero_tolerance: 0.0005
+      outside_zero_fraction: 0.98
+    background_correction:
+      enabled: true
+      mode: subtractive
+      sigma: 21.0
+      epsilon: 1.0e-6
+    standardize:
+      enabled: true
+      epsilon: 1.0e-6
+    dog:
+      enabled: false
+      sigma_low: 1.0
+      sigma_high: 3.0
+    fft_filter:
+      enabled: false
+      low_cut: 0.0
+      high_cut: 1.0
+      rolloff: 0.02
+  metrics:
+    enabled: ["ncc", "l2"]
+    primary: ncc
+  search:
+    strategy: coarse_to_fine
+    grid_steps: [0.05, 0.01, 0.002]
+    refine_window_steps: 4
+    exhaustive_step: 0.002
+  alignment:
+    enabled: true
+    translation:
+      enabled: true
+      max_shift_px: 10
+    rotation:
+      enabled: true
+      search_range_deg: 2.0
+      hard_max_deg: 5.0
+      step_deg: 0.5
+    interpolation_order: 3
+  pair_search:
+    two_stage_enabled: true
+    coarse_top_m: 20
+    coarse_metric: ncc
+    coarse_search:
+      strategy: coarse_to_fine
+      grid_steps: [0.1, 0.02]
+      refine_window_steps: 2
+      exhaustive_step: 0.02
+    coarse_alignment:
+      enabled: false
+      translation:
+        enabled: false
+        max_shift_px: 0
+      rotation:
+        enabled: false
+        search_range_deg: 0
+        hard_max_deg: 5.0
+        step_deg: 1.0
+      interpolation_order: 3
+
+output:
+  out_dir: outputs/gui_pair_demo
+  write_html_report: true
+
+debug:
+  enabled: false

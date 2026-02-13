@@ -116,6 +116,7 @@ Quick links:
 - `docs/networks/dual_unet.md` for the baseline Dual U-Net architecture details.
 - `docs/deterministic_mixing_fraction_inversion.md` for the deterministic (non-ML) mixing-fraction inversion baseline vision.
 - `docs/deterministic_inversion_usage.md` for deterministic inversion CLI usage and outputs.
+- `docs/gui_deterministic_pair_demo.md` for the deterministic pair-identification GUI workflow.
 - `todo_list.md` for the current work list.
 - `docs/roadmap.md` for long-term phases and deliverables.
 - `docs/references.md` for centralized literature citations.
@@ -210,6 +211,27 @@ Run the synthetic robustness benchmark (metric ranking by `x` recovery) with:
 python3 scripts/summarize_metric_robustness.py --debug
 ```
 
+Run the deterministic synthetic pair-demo workflow (`sample candidates -> synthesize C -> recover A/B/x`) with:
+
+```bash
+python3 scripts/run_deterministic_pair_demo.py \
+  --index-a 0 --index-b 1 --x 0.5 \
+  --candidate-count 10 --sample-seed 7 \
+  --gaussian-enabled --rotation-enabled \
+  --run-tag lab_demo
+```
+
+Identify best pair for an arbitrary mixed pattern `C` with:
+
+```bash
+python3 scripts/identify_candidate_pair.py \
+  --mixed-path data/raw/Double\ Pattern\ Data/50-50\ Double\ Pattern/<image>.bmp \
+  --candidate-dir data/raw/Double\ Pattern\ Data/Good\ Pattern \
+  --candidate-count 10 \
+  --sample-seed 7 \
+  --run-tag identify_demo
+```
+
 Use `configs/deterministic_inversion/inversion_default.yaml` / `inversion_debug.yaml` for the synthetic single-pair mode.
 To evaluate on real mixed patterns in batch mode, use `configs/deterministic_inversion/inversion_real_default.yaml` (or `inversion_real_debug.yaml`).
 To search unknown A/B pairs from a candidate pool (random synthetic trials), use
@@ -219,6 +241,26 @@ with optional FFT band-pass filtering and noisy-template inversion.
 
 The script writes `results.jsonl`, `summary_metrics.csv`, per-metric score curves, `report.json`, and 16-bit reconstructions under `output.out_dir`.
 Benchmark configs live at `configs/deterministic_inversion/robustness_default.yaml` and `configs/deterministic_inversion/robustness_debug.yaml`.
+Pair-demo configs live at `configs/deterministic_inversion/pair_demo_default.yaml` and
+`configs/deterministic_inversion/pair_demo_debug.yaml`.
+
+### Deterministic Pair Demo GUI
+
+Launch the PySide6 deterministic GUI wrapper with:
+
+```bash
+python3 scripts/run_deterministic_pair_gui.py
+```
+
+The GUI is image-first and lab-demo oriented:
+
+- top scroll row for candidate thumbnails and base names
+- synthetic case controls (`A`, `B`, `x`) with optional fixed seed and candidate locking
+- noise controls (Gaussian, salt-pepper, rotation in `[-2°, +2°]`)
+- two-stage NCC search with L2 tie-break and live ETA/progress logs
+- run artifacts saved under `outputs/gui_pair_demo/<timestamp>_<tag>`
+
+See `docs/gui_deterministic_pair_demo.md` for full usage and outputs.
 
 ### Inference GUI
 

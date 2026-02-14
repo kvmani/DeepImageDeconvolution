@@ -463,6 +463,30 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
 
         result_group = QtWidgets.QGroupBox("Result Summary")
         result_layout = QtWidgets.QVBoxLayout(result_group)
+        self._result_banner = QtWidgets.QFrame()
+        self._result_banner.setObjectName("resultBanner")
+        self._result_banner.setMinimumHeight(110)
+        banner_layout = QtWidgets.QHBoxLayout(self._result_banner)
+        banner_layout.setContentsMargins(12, 12, 12, 12)
+        banner_layout.setSpacing(12)
+        self._result_icon = QtWidgets.QLabel()
+        self._result_icon.setFixedSize(44, 44)
+        self._result_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._result_icon.setScaledContents(True)
+        banner_text_layout = QtWidgets.QVBoxLayout()
+        banner_text_layout.setContentsMargins(0, 0, 0, 0)
+        banner_text_layout.setSpacing(4)
+        self._result_title = QtWidgets.QLabel("Result: -")
+        self._result_title.setWordWrap(True)
+        self._result_title.setStyleSheet("font-weight:700; font-size:15px;")
+        self._result_detail = QtWidgets.QLabel("Run identification to see a summary here.")
+        self._result_detail.setWordWrap(True)
+        self._result_detail.setStyleSheet("color:#444; font-size:13px;")
+        banner_text_layout.addWidget(self._result_title)
+        banner_text_layout.addWidget(self._result_detail)
+        banner_layout.addWidget(self._result_icon)
+        banner_layout.addLayout(banner_text_layout, stretch=1)
+
         self._winner_label = QtWidgets.QLabel("Winner: -")
         self._x_label = QtWidgets.QLabel("x_hat: -")
         self._score_label = QtWidgets.QLabel("NCC: - | L2: -")
@@ -473,6 +497,7 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._topk_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self._topk_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self._topk_table.setMaximumHeight(200)
+        result_layout.addWidget(self._result_banner)
         result_layout.addWidget(self._winner_label)
         result_layout.addWidget(self._x_label)
         result_layout.addWidget(self._score_label)
@@ -483,6 +508,11 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         layout.addStretch()
         dock.setWidget(controls)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self._set_result_banner(
+            title="Result: -",
+            detail="Run identification to see a summary here.",
+            status="idle",
+        )
 
     def _apply_defaults(self) -> None:
         data_cfg = self._config.get("data", {}) if isinstance(self._config, dict) else {}
@@ -685,6 +715,11 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._x_label.setText("x_hat: -")
         self._score_label.setText("NCC: - | L2: -")
         self._pair_match_label.setText("Pair match: -")
+        self._set_result_banner(
+            title="Result: -",
+            detail="Synthetic case ready. Run identification to see results.",
+            status="idle",
+        )
         self._logger.info(
             "Synthetic case generated with A=%s B=%s x=%.4f (rotA=%.3f°, rotB=%.3f°).",
             case.candidate_a.pattern_id,
@@ -748,6 +783,11 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._worker.failed.connect(self._on_worker_failed)
 
         self._set_controls_enabled(False)
+        self._set_result_banner(
+            title="Identification running...",
+            detail="Searching candidate pairs. Progress appears below.",
+            status="running",
+        )
         self._progress_label.setText("Running identification...")
         self._eta_label.setText("ETA: -")
         self._progress_bar.setRange(0, 1)
@@ -811,6 +851,41 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._eta_label.setText("ETA: 0.0s")
         self._progress_bar.setValue(self._progress_bar.maximum())
 
+        if self._state.synthetic_case is not None:
+            x_true = float(self._state.synthetic_case.mix_fraction_true)
+            if pair_match:
+                title = "Pair correctly identified"
+                if x_abs_error is None:
+                    detail = (
+                        f"Predicted: {payload.result.winner.id_a} + {payload.result.winner.id_b}. "
+                        f"x_hat={x_hat_true_order:.4f} vs x_true={x_true:.4f}."
+                    )
+                else:
+                    detail = (
+                        f"Predicted: {payload.result.winner.id_a} + {payload.result.winner.id_b}. "
+                        f"x_hat={x_hat_true_order:.4f} vs x_true={x_true:.4f} (|err|={x_abs_error:.4f})."
+                    )
+                self._set_result_banner(title=title, detail=detail, status="success")
+            else:
+                title = "Pair mismatch"
+                detail = (
+                    f"Predicted: {payload.result.winner.id_a} + {payload.result.winner.id_b}. "
+                    f"True: {self._state.synthetic_case.candidate_a.pattern_id} + "
+                    f"{self._state.synthetic_case.candidate_b.pattern_id}."
+                )
+                if x_abs_error is not None:
+                    detail = f"{detail} x_hat={payload.result.winner.x_hat:.4f} vs x_true={x_true:.4f}."
+                self._set_result_banner(title=title, detail=detail, status="mismatch")
+        else:
+            self._set_result_banner(
+                title="Identification complete",
+                detail=(
+                    f"Winner: {payload.result.winner.id_a} + {payload.result.winner.id_b} | "
+                    f"x_hat={payload.result.winner.x_hat:.4f}."
+                ),
+                status="success",
+            )
+
         run_dir = self._persist_run_outputs(
             payload=payload,
             pair_match=pair_match,
@@ -832,6 +907,7 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._worker = None
         self._progress_label.setText("Failed")
         self._eta_label.setText("ETA: -")
+        self._set_result_banner(title="Identification failed", detail=message, status="error")
         self._show_error("Identification failed", message)
         self._logger.error("Identification failed: %s", message)
 
@@ -1072,6 +1148,11 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._viewer_residual.set_image(None)
         self._topk_table.setRowCount(0)
         self._state.identification = None
+        self._set_result_banner(
+            title="Result: -",
+            detail="Run identification to see a summary here.",
+            status="idle",
+        )
         self._refresh_candidate_highlights()
 
     def _set_controls_enabled(self, enabled: bool) -> None:
@@ -1079,6 +1160,59 @@ class DeterministicPairWindow(QtWidgets.QMainWindow):
         self._generate_btn.setEnabled(enabled)
         self._identify_btn.setEnabled(enabled)
         self._run_demo_btn.setEnabled(enabled)
+
+    def _make_status_pixmap(self, color: QtGui.QColor, mark: Optional[bool]) -> QtGui.QPixmap:
+        size = 44
+        pixmap = QtGui.QPixmap(size, size)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QtGui.QBrush(color))
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.drawEllipse(0, 0, size - 1, size - 1)
+
+        if mark is not None:
+            pen = QtGui.QPen(QtGui.QColor("white"))
+            pen.setWidth(3)
+            pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            if mark:
+                start = QtCore.QPointF(size * 0.26, size * 0.55)
+                mid = QtCore.QPointF(size * 0.45, size * 0.72)
+                end = QtCore.QPointF(size * 0.76, size * 0.30)
+                painter.drawLine(start, mid)
+                painter.drawLine(mid, end)
+            else:
+                p1 = QtCore.QPointF(size * 0.30, size * 0.30)
+                p2 = QtCore.QPointF(size * 0.70, size * 0.70)
+                p3 = QtCore.QPointF(size * 0.70, size * 0.30)
+                p4 = QtCore.QPointF(size * 0.30, size * 0.70)
+                painter.drawLine(p1, p2)
+                painter.drawLine(p3, p4)
+        painter.end()
+        return pixmap
+
+    def _set_result_banner(self, title: str, detail: str, status: str) -> None:
+        palette = {
+            "idle": {"bg": "#f5f5f5", "border": "#c7c7c7", "dot": "#9e9e9e", "mark": None},
+            "running": {"bg": "#eef4ff", "border": "#b5c9ef", "dot": "#1f77b4", "mark": None},
+            "success": {"bg": "#edf7ee", "border": "#b6e2bf", "dot": "#2ca02c", "mark": True},
+            "mismatch": {"bg": "#fdecea", "border": "#f3c2bf", "dot": "#d62728", "mark": False},
+            "error": {"bg": "#fdecea", "border": "#f3c2bf", "dot": "#d62728", "mark": False},
+        }
+        style = palette.get(status, palette["idle"])
+        self._result_banner.setStyleSheet(
+            "QFrame#resultBanner{"
+            f"border:1px solid {style['border']};"
+            f"border-radius:6px;"
+            f"background:{style['bg']};"
+            "}"
+        )
+        self._result_icon.setPixmap(
+            self._make_status_pixmap(QtGui.QColor(style["dot"]), style["mark"])
+        )
+        self._result_title.setText(title)
+        self._result_detail.setText(detail)
 
     def _show_error(self, title: str, message: str) -> None:
         QtWidgets.QMessageBox.critical(self, title, message)
